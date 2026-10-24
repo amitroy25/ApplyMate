@@ -24,19 +24,31 @@ self.addEventListener('fetch', (event) => {
 async function receiveSharedImage(request) {
   try {
     const formData = await request.formData();
-    const candidates = formData.getAll('shared_image');
-    const image = candidates.find((value) => value instanceof File);
+    const entries = Array.from(formData.entries());
+    const imageEntry = entries.find(([name, value]) =>
+      name === 'shared_image' && value instanceof Blob && value.type.startsWith('image/')
+    ) || entries.find(([, value]) =>
+      value instanceof Blob && value.type.startsWith('image/')
+    );
+    const imageValue = imageEntry?.[1];
 
-    if (!image) return redirectWithError('missing-image');
-    if (!SUPPORTED_IMAGE_TYPES.has(image.type.toLowerCase())) return redirectWithError('unsupported-image');
-    if (image.size === 0 || image.size > SHARE_MAX_BYTES) return redirectWithError('image-too-large');
+    if (!imageValue) return redirectWithError('missing-image');
+    const imageType = imageValue.type.toLowerCase() === 'image/jpg'
+      ? 'image/jpeg'
+      : imageValue.type.toLowerCase();
+    if (!SUPPORTED_IMAGE_TYPES.has(imageType)) return redirectWithError('unsupported-image');
+    if (imageValue.size === 0 || imageValue.size > SHARE_MAX_BYTES) return redirectWithError('image-too-large');
 
     const id = crypto.randomUUID();
+    const imageName = typeof imageValue.name === 'string' && imageValue.name
+      ? imageValue.name
+      : `shared-screenshot.${extensionForType(imageType)}`;
+    const image = new File([imageValue], imageName, { type: imageType });
     await saveSharedImage({
       id,
       file: image,
-      fileName: image.name || `shared-screenshot.${extensionForType(image.type)}`,
-      type: image.type.toLowerCase(),
+      fileName: imageName,
+      type: imageType,
       size: image.size,
       receivedAt: Date.now()
     });

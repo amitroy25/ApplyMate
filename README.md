@@ -185,7 +185,7 @@ Before calling Gmail, the app saves an application as `Sending`. A successful Gm
 3. In Photos, Gallery, LinkedIn, or another app, choose a screenshot and tap **Share → ApplyMate**. ApplyMate opens the screenshot in its crop editor. Adjust the crop, zoom, or rotation, then extract and review the detected details before preparing an email.
 4. If ApplyMate is not listed in the share sheet, open the installed app once and try again. You can always choose **Replace Image** in ApplyMate to upload manually.
 
-Shared screenshots are limited to PNG, JPEG, or WebP and 15 MB. The service worker stores a temporary copy in that browser's IndexedDB and removes expired copies after 24 hours; the app deletes a consumed copy after loading it. Sharing requires the installed PWA, browser support, and a service worker controlling the app. Verify the share-sheet flow on the target Android device after deployment; desktop build checks cannot confirm device-specific share behavior.
+Shared screenshots are limited to PNG, JPEG, or WebP and 15 MB. The service worker accepts the image under the configured form field or another image-file field, stores a temporary copy in that browser's IndexedDB, and removes expired copies after 24 hours; the app deletes a consumed copy after loading it. Sharing requires the installed PWA, browser support, and a service worker controlling the app. From Android's screenshot preview, choose its **Share** button, or share the saved screenshot from Photos/Gallery. Sharing a LinkedIn post itself sends its link rather than a screenshot. Verify the share-sheet flow on the target Android device after deployment; desktop build checks cannot confirm device-specific share behavior.
 
 ### Remaining before public launch
 

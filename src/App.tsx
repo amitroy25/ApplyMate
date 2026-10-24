@@ -186,7 +186,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (!sharedImageError) return;
     const messages: Record<string, string> = {
-      'missing-image': 'No screenshot was included. Try sharing the image from your gallery again.',
+      'missing-image': 'The selected share did not include an image file. Use Android’s screenshot preview Share button or share the screenshot from Photos/Gallery; sharing the LinkedIn post itself sends a link, not its screenshot.',
       'unsupported-image': 'ApplyMate accepts PNG, JPEG, or WebP screenshots.',
       'image-too-large': 'The shared screenshot is empty or larger than the 15 MB limit.',
       'share-unavailable': 'ApplyMate could not receive this screenshot. Try sharing it again or upload it manually.'
