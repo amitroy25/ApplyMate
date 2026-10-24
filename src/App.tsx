@@ -92,7 +92,7 @@ export const App: React.FC = () => {
       if (event !== 'INITIAL_SESSION') receivedAuthChange = true;
       setSession(nextSession);
       setGmailAccessToken(nextSession?.provider_token || null);
-      setIntegrationError(null);
+      if (nextSession) setIntegrationError(null);
       if (event === 'INITIAL_SESSION') {
         setCurrentScreen(nextSession ? requestedScreen : 'welcome');
         setIsSigningIn(false);
