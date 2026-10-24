@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { X, Check, CropIcon, RotateCcw } from 'lucide-react';
+import { X, Check, CropIcon, RotateCcw, RotateCw } from 'lucide-react';
 
 interface CropRect {
   x: number; // 0-1 fraction of displayed image
@@ -12,13 +12,15 @@ interface ImageCropperProps {
   imageUrl: string;
   onCrop: (croppedDataUrl: string) => void;
   onCancel: () => void;
+  fileName?: string;
+  fileSize?: number;
 }
 
 type Handle = 'tl' | 'tr' | 'bl' | 'br' | 'move' | null;
 
 const MIN_FRAC = 0.08; // minimum crop size as fraction of image
 
-export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, onCancel }) => {
+export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, onCancel, fileName, fileSize }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -36,6 +38,29 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
 
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [rotation, setRotation] = useState(0);
+
+  const rotatedDimensions = (img: HTMLImageElement) => (
+    rotation % 180 === 0
+      ? { w: img.naturalWidth, h: img.naturalHeight }
+      : { w: img.naturalHeight, h: img.naturalWidth }
+  );
+
+  const drawTransformedImage = (
+    ctx: CanvasRenderingContext2D,
+    img: HTMLImageElement,
+    width: number,
+    height: number,
+    scale: number
+  ) => {
+    ctx.save();
+    ctx.translate(width / 2, height / 2);
+    ctx.rotate((rotation * Math.PI) / 180);
+    ctx.scale(scale, scale);
+    ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+    ctx.restore();
+  };
 
   // ------------------------------------------------------------------
   // Draw helper
@@ -52,9 +77,11 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
       const cw = canvas.width;
       const ch = canvas.height;
 
-      // Draw image
+      // Draw the rotated and zoomed image inside the fixed crop viewport.
       ctx.clearRect(0, 0, cw, ch);
-      ctx.drawImage(img, 0, 0, cw, ch);
+      const dimensions = rotatedDimensions(img);
+      const scale = Math.min(cw / dimensions.w, ch / dimensions.h) * zoom;
+      drawTransformedImage(ctx, img, cw, ch, scale);
 
       // Dim outside crop
       const cx = currentCrop.x * cw;
@@ -98,7 +125,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
       ctx.fillStyle = '#FFFFFF';
       corners.forEach(([hx, hy]) => ctx.fillRect(hx, hy, hs, hs));
     },
-    [imgLoaded]
+    [imgLoaded, rotation, zoom]
   );
 
   // Redraw whenever crop changes
@@ -110,21 +137,28 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
   // Load image + set canvas size
   // ------------------------------------------------------------------
   useEffect(() => {
+    let active = true;
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
+      if (!active) return;
       imgRef.current = img;
       const container = containerRef.current;
       if (!container) return;
       const maxW = container.clientWidth;
-      const ratio = img.naturalHeight / img.naturalWidth;
-      const displayW = maxW;
-      const displayH = Math.min(maxW * ratio, 420);
+      const naturalW = rotation % 180 === 0 ? img.naturalWidth : img.naturalHeight;
+      const naturalH = rotation % 180 === 0 ? img.naturalHeight : img.naturalWidth;
+      const scale = Math.min(maxW / naturalW, 420 / naturalH);
+      const displayW = Math.round(naturalW * scale);
+      const displayH = Math.round(naturalH * scale);
       setCanvasSize({ w: displayW, h: displayH });
       setImgLoaded(true);
     };
     img.src = imageUrl;
-  }, [imageUrl]);
+    return () => {
+      active = false;
+    };
+  }, [imageUrl, rotation]);
 
   // ------------------------------------------------------------------
   // Pointer → canvas fraction helpers
@@ -214,7 +248,16 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
   // ------------------------------------------------------------------
   // Reset crop
   // ------------------------------------------------------------------
-  const resetCrop = () => setCrop({ x: 0.05, y: 0.05, w: 0.9, h: 0.9 });
+  const resetCrop = () => {
+    setZoom(1);
+    setRotation(0);
+    setCrop({ x: 0.05, y: 0.05, w: 0.9, h: 0.9 });
+  };
+
+  const rotateImage = () => {
+    setRotation((current) => (current + 90) % 360);
+    setCrop({ x: 0.05, y: 0.05, w: 0.9, h: 0.9 });
+  };
 
   // ------------------------------------------------------------------
   // Confirm — draw cropped region to a new canvas → dataURL
@@ -224,16 +267,23 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
     if (!img) return;
 
     const out = document.createElement('canvas');
-    const srcX = crop.x * img.naturalWidth;
-    const srcY = crop.y * img.naturalHeight;
-    const srcW = crop.w * img.naturalWidth;
-    const srcH = crop.h * img.naturalHeight;
+    const dimensions = rotatedDimensions(img);
+    const srcX = crop.x * dimensions.w;
+    const srcY = crop.y * dimensions.h;
+    const srcW = crop.w * dimensions.w;
+    const srcH = crop.h * dimensions.h;
 
     out.width = Math.round(srcW);
     out.height = Math.round(srcH);
     const ctx = out.getContext('2d');
     if (!ctx) return;
-    ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, out.width, out.height);
+    const transformed = document.createElement('canvas');
+    transformed.width = dimensions.w;
+    transformed.height = dimensions.h;
+    const transformedContext = transformed.getContext('2d');
+    if (!transformedContext) return;
+    drawTransformedImage(transformedContext, img, dimensions.w, dimensions.h, zoom);
+    ctx.drawImage(transformed, srcX, srcY, srcW, srcH, 0, 0, out.width, out.height);
     onCrop(out.toDataURL('image/jpeg', 0.92));
   };
 
@@ -268,18 +318,31 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
           <CropIcon size={17} color="#818CF8" />
           <span>Crop Screenshot</span>
         </div>
-        <button
-          type="button"
-          onClick={resetCrop}
-          title="Reset crop"
-          style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px' }}
-        >
-          <RotateCcw size={18} />
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={rotateImage}
+            title="Rotate 90 degrees"
+            aria-label="Rotate screenshot 90 degrees"
+            style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px' }}
+          >
+            <RotateCw size={18} />
+          </button>
+          <button
+            type="button"
+            onClick={resetCrop}
+            title="Reset crop and image adjustments"
+            aria-label="Reset crop and image adjustments"
+            style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px' }}
+          >
+            <RotateCcw size={18} />
+          </button>
+        </div>
       </div>
 
       {/* Tip */}
       <p style={{ fontSize: '12px', color: '#94A3B8', marginBottom: '10px', textAlign: 'center' }}>
+        {fileName ? `${fileName}${fileSize ? ` · ${(fileSize / (1024 * 1024)).toFixed(1)} MB` : ''} · ` : ''}
         Drag corners to resize · Drag inside to move
       </p>
 
@@ -301,6 +364,20 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
           </div>
         )}
       </div>
+
+      <label style={{ width: '100%', maxWidth: '412px', padding: '12px 20px 0', color: '#CBD5E1', fontSize: '12px' }}>
+        Zoom: {zoom.toFixed(1)}×
+        <input
+          type="range"
+          aria-label="Zoom screenshot"
+          min="1"
+          max="3"
+          step="0.1"
+          value={zoom}
+          onChange={(event) => setZoom(Number(event.target.value))}
+          style={{ display: 'block', width: '100%', marginTop: '8px', accentColor: '#818CF8' }}
+        />
+      </label>
 
       {/* Footer buttons */}
       <div

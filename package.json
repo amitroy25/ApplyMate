@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "npx tsx --test tests/ocrService.test.ts tests/gmailService.test.ts"
+    "test": "npx tsx --test tests/ocrService.test.ts tests/gmailService.test.ts tests/sharedImageService.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

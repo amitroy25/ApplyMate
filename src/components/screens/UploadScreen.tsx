@@ -1,14 +1,18 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, RefreshCw, Trash2, ArrowRight, Loader2, MoreHorizontal, ThumbsUp, Heart, MessageSquare, AlertCircle, Crop } from 'lucide-react';
 import { runOcrOnImage, parseJobText } from '../../services/ocrService';
 import { preprocessImageForOcr } from '../../services/imagePreprocessor';
 import { ExtractedJobDetails } from '../../types';
 import { defaultExtractedJob } from '../../mock/initialData';
 import { ImageCropper } from '../common/ImageCropper';
+import { fixJobDetailsWithAI, getSavedGeminiKey } from '../../services/aiService';
+import { validateSharedImage } from '../../services/sharedImageService';
 
 interface UploadScreenProps {
   activeFile: File | null;
   previewUrl: string | null;
+  startInCropper: boolean;
+  sharedImageError: string | null;
   onBack: () => void;
   onReplaceImage: (file: File) => void;
   onRemoveImage: () => void;
@@ -18,6 +22,8 @@ interface UploadScreenProps {
 export const UploadScreen: React.FC<UploadScreenProps> = ({
   activeFile,
   previewUrl,
+  startInCropper,
+  sharedImageError,
   onBack,
   onReplaceImage,
   onRemoveImage,
@@ -27,29 +33,53 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
   const [ocrStatus, setOcrStatus] = useState<string>('');
   const [ocrProgress, setOcrProgress] = useState<number>(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [ocrFallbackDetails, setOcrFallbackDetails] = useState<ExtractedJobDetails | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const extractionIdRef = useRef(0);
+  const isExtractingRef = useRef(false);
 
   // Crop state
   const [showCropper, setShowCropper] = useState(false);
   // croppedUrl overrides previewUrl when set (used as OCR source)
   const [croppedUrl, setCroppedUrl] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (startInCropper && previewUrl && previewUrl !== 'sample-linkedin-post') {
+      setShowCropper(true);
+    }
+  }, [startInCropper, previewUrl]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) {
+      try {
+        validateSharedImage(file);
+      } catch (error) {
+        setErrorMessage((error as Error).message);
+        return;
+      }
       setErrorMessage(null);
+      setOcrFallbackDetails(null);
       setCroppedUrl(null); // reset crop when new image is picked
-      onReplaceImage(e.target.files[0]);
+      onReplaceImage(file);
     }
   };
 
   const handleExtract = async () => {
+    if (isExtractingRef.current) return;
+    isExtractingRef.current = true;
+    const extractionId = ++extractionIdRef.current;
     setIsExtracting(true);
     setErrorMessage(null);
+    setOcrFallbackDetails(null);
     setOcrProgress(10);
     setOcrStatus('Enhancing image contrast...');
+    let parsedDetails: ExtractedJobDetails | null = null;
 
     try {
       if (activeFile || croppedUrl) {
+        if (activeFile) validateSharedImage(activeFile);
         let imageSource: string;
 
         if (croppedUrl) {
@@ -67,33 +97,49 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
 
         // Step 2: Run Tesseract on the image
         const ocrResult = await runOcrOnImage(imageSource, (p) => {
+          if (extractionId !== extractionIdRef.current) return;
           setOcrStatus(p.status || 'Scanning image...');
           setOcrProgress(Math.round((p.progress || 0.4) * 100));
         });
 
+        if (extractionId !== extractionIdRef.current) return;
+        if (!ocrResult.text.trim()) {
+          throw new Error('No text was found in this screenshot. Crop closer to the job post and try again.');
+        }
+
         setOcrStatus('Extracting recruiter email & role...');
         setOcrProgress(95);
 
-        const parsed = parseJobText(ocrResult.text, ocrResult.confidence);
-        onExtractDetails(parsed);
+        parsedDetails = parseJobText(ocrResult.text, ocrResult.confidence);
+        const geminiKey = getSavedGeminiKey();
+        if (geminiKey) {
+          setOcrStatus('Checking job details with Gemini AI...');
+          setOcrProgress(97);
+          const refined = await fixJobDetailsWithAI(ocrResult.text, parsedDetails, geminiKey);
+          if (extractionId !== extractionIdRef.current) return;
+          onExtractDetails(refined);
+        } else {
+          onExtractDetails(parsedDetails);
+        }
       } else {
-        // Sample post preset
+        if (!isSamplePost) throw new Error('Choose a screenshot before extracting job details.');
         setOcrStatus('Scanning sample LinkedIn post...');
         setOcrProgress(60);
 
-        setTimeout(() => {
-          setOcrProgress(100);
-          onExtractDetails(defaultExtractedJob);
-        }, 600);
-      }
-    } catch (err: any) {
-      console.error('OCR Error:', err);
-      setErrorMessage('OCR engine encountered an issue. Falling back to manual entry.');
-      setTimeout(() => {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        if (extractionId !== extractionIdRef.current) return;
+        setOcrProgress(100);
         onExtractDetails(defaultExtractedJob);
-      }, 1000);
+      }
+    } catch (error) {
+      if (extractionId !== extractionIdRef.current) return;
+      if (parsedDetails) setOcrFallbackDetails(parsedDetails);
+      setErrorMessage((error as Error).message || 'Could not extract job details. Check the screenshot and try again.');
     } finally {
-      setIsExtracting(false);
+      if (extractionId === extractionIdRef.current) {
+        isExtractingRef.current = false;
+        setIsExtracting(false);
+      }
     }
   };
 
@@ -102,7 +148,16 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
     setShowCropper(false);
   };
 
-  const isSamplePost = !previewUrl || previewUrl === 'sample-linkedin-post';
+  const handleBack = () => {
+    if (isExtractingRef.current) {
+      extractionIdRef.current += 1;
+      isExtractingRef.current = false;
+      setIsExtracting(false);
+    }
+    onBack();
+  };
+
+  const isSamplePost = previewUrl === 'sample-linkedin-post';
   // What we actually show in preview — cropped overrides original
   const displayUrl = croppedUrl || previewUrl;
 
@@ -114,12 +169,14 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
           imageUrl={previewUrl}
           onCrop={handleCropDone}
           onCancel={() => setShowCropper(false)}
+          fileName={activeFile?.name}
+          fileSize={activeFile?.size}
         />
       )}
       <div>
         {/* Header */}
         <div className="app-header">
-          <button onClick={onBack} className="back-btn" aria-label="Go back" type="button">
+          <button onClick={handleBack} className="back-btn" aria-label="Go back" type="button">
             <ArrowLeft size={20} />
           </button>
           <h2 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--text-main)' }}>
@@ -133,7 +190,7 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
           type="file"
           ref={fileInputRef}
           onChange={handleFileChange}
-          accept="image/png, image/jpeg, image/jpg"
+          accept="image/png, image/jpeg, image/webp"
           style={{ display: 'none' }}
         />
 
@@ -155,6 +212,25 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
             >
               <AlertCircle size={16} />
               <span>{errorMessage}</span>
+            </div>
+          )}
+          {sharedImageError && (
+            <div
+              role="alert"
+              style={{
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FECACA',
+                borderRadius: '12px',
+                padding: '10px 14px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '8px',
+                fontSize: '12px',
+                color: '#991B1B'
+              }}
+            >
+              <AlertCircle size={16} />
+              <span>{sharedImageError}</span>
             </div>
           )}
 
@@ -247,7 +323,7 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
                   </div>
                 </div>
               </div>
-            ) : (
+            ) : previewUrl ? (
               /* User Uploaded Screenshot Display */
               <div style={{ position: 'relative', background: '#0F172A' }}>
                 <div style={{ maxHeight: '380px', overflow: 'hidden', display: 'flex', justifyContent: 'center' }}>
@@ -305,6 +381,13 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
                   </div>
                 )}
               </div>
+            ) : (
+              <div style={{ minHeight: '180px', display: 'grid', placeItems: 'center', padding: '24px', color: 'var(--text-muted)', textAlign: 'center' }}>
+                <div>
+                  <AlertCircle size={24} color="var(--primary)" />
+                  <p style={{ marginTop: '8px', fontSize: '13px' }}>No screenshot is loaded. Choose an image or share a screenshot to ApplyMate.</p>
+                </div>
+              </div>
             )}
           </div>
 
@@ -320,7 +403,11 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
             </button>
 
             <button
-              onClick={onRemoveImage}
+              onClick={() => {
+                setCroppedUrl(null);
+                setOcrFallbackDetails(null);
+                onRemoveImage();
+              }}
               className="btn-danger-outline"
               type="button"
             >
@@ -372,6 +459,16 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
 
       {/* Bottom CTA Button */}
       <div style={{ padding: '20px' }}>
+        {ocrFallbackDetails && errorMessage && (
+          <button
+            onClick={() => onExtractDetails(ocrFallbackDetails)}
+            className="btn-secondary"
+            style={{ marginBottom: '10px' }}
+            type="button"
+          >
+            Continue with OCR results
+          </button>
+        )}
         <button
           onClick={handleExtract}
           disabled={isExtracting}

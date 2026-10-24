@@ -113,7 +113,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
-            accept="image/png, image/jpeg, image/jpg"
+            accept="image/png, image/jpeg, image/webp"
             style={{ display: 'none' }}
           />
 

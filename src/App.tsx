@@ -40,10 +40,13 @@ import {
 } from './services/dataService';
 import { GmailDeliveryUncertainError, googleOAuthScopes, sendGmailMessage } from './services/gmailService';
 import { isSupabaseConfigured, supabase } from './services/supabaseClient';
+import { deleteSharedImage, loadSharedImage } from './services/sharedImageService';
 
 export const App: React.FC = () => {
   const searchParams = new URLSearchParams(window.location.search);
   const initialScreenParam = searchParams.get('screen') as ScreenName | null;
+  const sharedImageId = searchParams.get('sharedImage');
+  const sharedImageError = searchParams.get('shareError');
   const [currentScreen, setCurrentScreen] = useState<ScreenName>('welcome');
   const [userProfile, setUserProfile] = useState<UserProfile>(initialUserProfile);
   const [settings, setSettings] = useState<AppSettings>(initialSettings);
@@ -58,6 +61,8 @@ export const App: React.FC = () => {
   // Active Flow State
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadedPreview, setUploadedPreview] = useState<string | null>(null);
+  const [startCropOnUpload, setStartCropOnUpload] = useState(false);
+  const [sharedFileError, setSharedFileError] = useState<string | null>(null);
   const [extractedJob, setExtractedJob] = useState<ExtractedJobDetails>(defaultExtractedJob);
 
   // Email Draft State
@@ -85,7 +90,9 @@ export const App: React.FC = () => {
     let receivedAuthChange = false;
     const requestedScreen = initialScreenParam && ['home', 'upload', 'extracted-details', 'review-email', 'sent-success', 'history', 'profile', 'settings'].includes(initialScreenParam)
       ? initialScreenParam
-      : 'home';
+      : sharedImageId || sharedImageError
+        ? 'upload'
+        : 'home';
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!active) return;
       if (event === 'INITIAL_SESSION' && receivedAuthChange) return;
@@ -99,7 +106,7 @@ export const App: React.FC = () => {
         setIsCheckingAuth(false);
         return;
       }
-      if (event === 'SIGNED_IN') setCurrentScreen('home');
+      if (event === 'SIGNED_IN') setCurrentScreen(sharedImageId || sharedImageError ? 'upload' : 'home');
       if (event === 'SIGNED_OUT') setCurrentScreen('welcome');
       setIsSigningIn(false);
       setIsCheckingAuth(false);
@@ -137,6 +144,63 @@ export const App: React.FC = () => {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!sharedImageId || !session?.user) return;
+
+    let active = true;
+    loadSharedImage(sharedImageId)
+      .then(async (file) => {
+        if (!active) return;
+        if (!file) throw new Error('The shared screenshot could not be found. Share it again from your photos.');
+
+        const previewUrl = URL.createObjectURL(file);
+        setUploadedFile(file);
+        setUploadedPreview(previewUrl);
+        setExtractedJob(defaultExtractedJob);
+        setStartCropOnUpload(true);
+        setSharedFileError(null);
+        setCurrentScreen('upload');
+
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete('sharedImage');
+        window.history.replaceState(null, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
+
+        try {
+          await deleteSharedImage(sharedImageId);
+        } catch (error) {
+          setSharedFileError(`Screenshot is ready, but temporary browser storage could not be cleared: ${(error as Error).message}`);
+        }
+      })
+      .catch((error: Error) => {
+        if (!active) return;
+        setSharedFileError(error.message);
+        setCurrentScreen('upload');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [sharedImageId, session?.user.id]);
+
+  useEffect(() => {
+    if (!sharedImageError) return;
+    const messages: Record<string, string> = {
+      'missing-image': 'No screenshot was included. Try sharing the image from your gallery again.',
+      'unsupported-image': 'ApplyMate accepts PNG, JPEG, or WebP screenshots.',
+      'image-too-large': 'The shared screenshot is empty or larger than the 15 MB limit.',
+      'share-unavailable': 'ApplyMate could not receive this screenshot. Try sharing it again or upload it manually.'
+    };
+    const message = messages[sharedImageError] || 'The shared screenshot could not be received. Upload it manually instead.';
+    setSharedFileError(message);
+    setIntegrationError(message);
+    if (session?.user) {
+      setCurrentScreen('upload');
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete('shareError');
+      window.history.replaceState(null, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
+    }
+  }, [sharedImageError, session?.user.id]);
 
   useEffect(() => {
     if (!session?.user) return;
@@ -198,6 +262,8 @@ export const App: React.FC = () => {
   const handleSelectImage = (file: File | null, previewUrl: string) => {
     setUploadedFile(file);
     setUploadedPreview(previewUrl);
+    setStartCropOnUpload(false);
+    setSharedFileError(null);
     setExtractedJob(defaultExtractedJob);
     generateEmail(defaultExtractedJob);
   };
@@ -223,7 +289,7 @@ export const App: React.FC = () => {
       options: {
         scopes: googleOAuthScopes,
         queryParams: { access_type: 'online', prompt: 'consent' },
-        redirectTo: window.location.origin
+        redirectTo: `${window.location.origin}${window.location.pathname}${window.location.search}`
       }
     });
     if (error) {
@@ -433,6 +499,8 @@ export const App: React.FC = () => {
         <UploadScreen
           activeFile={uploadedFile}
           previewUrl={uploadedPreview}
+          startInCropper={startCropOnUpload}
+          sharedImageError={sharedFileError}
           onBack={() => setCurrentScreen('home')}
           onReplaceImage={(file) => {
             const url = URL.createObjectURL(file);

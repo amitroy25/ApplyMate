@@ -18,7 +18,7 @@ The app includes the following screens:
    - Header with brand mark and settings gear icon.
    - Personalized greeting: *"Good Morning, Amit! 👋"*
    - Daily sent count against the configured application target, plus pending and interview counts.
-   - **Apply for a job** upload card with dotted dropzone and native device file picker (supports JPG/PNG + sample test post toggle).
+   - **Apply for a job** upload card with dotted dropzone and native device file picker (supports PNG/JPEG/WebP + sample test post toggle).
    - **My Resume** status card and profile shortcut for uploading a PDF.
    - **Recent Applications** list with status badges and quick view.
    - Bottom navigation bar: Home, History, Profile.
@@ -26,7 +26,8 @@ The app includes the following screens:
 3. **Screen 3 — Screenshot Upload (`UploadScreen.tsx`)**
    - High-fidelity preview of the LinkedIn post screenshot (or uploaded image from user gallery).
    - Actions to **Replace Image** or **Remove**.
-   - **Extract Job Details →** primary CTA with loading simulation.
+   - Crop, zoom, or rotate uploaded screenshots before OCR; optional Gemini cleanup runs when a key is configured.
+   - **Extract Job Details →** primary CTA with progress and actionable retry/continue options if extraction fails.
 
 4. **Screen 4 — Extracted Job Details (`ExtractedDetailsScreen.tsx`)**
    - Success banner: *"✓ Job details extracted successfully!"*
@@ -171,10 +172,20 @@ Before calling Gmail, the app saves an application as `Sending`. A successful Gm
 ### Implemented
 
 * OCR text recognition and parsing, optional Gemini cleanup, and editable generated email drafts.
+* Android PWA screenshot sharing through the installed app, with in-browser crop, zoom, rotation, OCR, and job-detail review.
 * Supabase Google OAuth, per-user Postgres data, and private PDF resume storage (requires setup above).
 * Confirmed Gmail API sending with a PDF MIME attachment, plain-text and formatted HTML email alternatives, and explicit sending/sent/failed states.
 * Responsive full-height phone layout with dynamic viewport and safe-area support.
 * Daily sent count, with a default target of 20 applications.
+
+### Share a screenshot from Android
+
+1. Deploy the app over HTTPS. The Web Share Target requires a supported browser and an installed PWA; a normal browser tab may not appear in Android's share sheet.
+2. Open the deployed app in Chrome on Android, sign in, then choose Chrome's **Install app** / **Add to Home screen** option. Launch ApplyMate once after installing so its service worker can take control.
+3. In Photos, Gallery, LinkedIn, or another app, choose a screenshot and tap **Share → ApplyMate**. ApplyMate opens the screenshot in its crop editor. Adjust the crop, zoom, or rotation, then extract and review the detected details before preparing an email.
+4. If ApplyMate is not listed in the share sheet, open the installed app once and try again. You can always choose **Replace Image** in ApplyMate to upload manually.
+
+Shared screenshots are limited to PNG, JPEG, or WebP and 15 MB. The service worker stores a temporary copy in that browser's IndexedDB and removes expired copies after 24 hours; the app deletes a consumed copy after loading it. Sharing requires the installed PWA, browser support, and a service worker controlling the app. Verify the share-sheet flow on the target Android device after deployment; desktop build checks cannot confirm device-specific share behavior.
 
 ### Remaining before public launch
 
