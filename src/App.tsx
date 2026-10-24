@@ -82,8 +82,27 @@ export const App: React.FC = () => {
     }
 
     let active = true;
-    supabase.auth.getSession().then(({ data, error }) => {
+    let receivedAuthEvent = false;
+    const requestedScreen = initialScreenParam && ['home', 'upload', 'extracted-details', 'review-email', 'sent-success', 'history', 'profile', 'settings'].includes(initialScreenParam)
+      ? initialScreenParam
+      : 'home';
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!active) return;
+      receivedAuthEvent = true;
+      setSession(nextSession);
+      setGmailAccessToken(nextSession?.provider_token || null);
+      setIntegrationError(null);
+      if (event === 'INITIAL_SESSION') {
+        setCurrentScreen(nextSession ? requestedScreen : 'welcome');
+      }
+      if (event === 'SIGNED_IN') setCurrentScreen('home');
+      if (event === 'SIGNED_OUT') setCurrentScreen('welcome');
+      setIsSigningIn(false);
+      setIsCheckingAuth(false);
+    });
+
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!active || receivedAuthEvent) return;
       if (error) {
         setIntegrationError(`Could not restore your account session: ${error.message}`);
         setIsCheckingAuth(false);
@@ -91,22 +110,11 @@ export const App: React.FC = () => {
       }
       setSession(data.session);
       setGmailAccessToken(data.session?.provider_token || null);
-      if (data.session) {
-        const requestedScreen = initialScreenParam && ['home', 'upload', 'extracted-details', 'review-email', 'sent-success', 'history', 'profile', 'settings'].includes(initialScreenParam)
-          ? initialScreenParam
-          : 'home';
-        setCurrentScreen(requestedScreen);
-      }
+      if (data.session) setCurrentScreen(requestedScreen);
       setIsCheckingAuth(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
-      setSession(nextSession);
-      setGmailAccessToken(nextSession?.provider_token || null);
-      setIntegrationError(null);
-      if (event === 'SIGNED_IN') setCurrentScreen('home');
-      if (event === 'SIGNED_OUT') setCurrentScreen('welcome');
-      setIsSigningIn(false);
+    }).catch((error: Error) => {
+      if (!active || receivedAuthEvent) return;
+      setIntegrationError(`Could not restore your account session: ${error.message}`);
       setIsCheckingAuth(false);
     });
 
@@ -376,8 +384,14 @@ export const App: React.FC = () => {
 
   return (
     <MobileContainer showStatusBar={true}>
+      {isCheckingAuth && (
+        <div className="screen-scroll-container no-nav" role="status" aria-live="polite">
+          Restoring your session…
+        </div>
+      )}
+
       {/* Screen 1: Welcome Screen */}
-      {(!session || currentScreen === 'welcome') && (
+      {!isCheckingAuth && (!session || currentScreen === 'welcome') && (
         <WelcomeScreen
           isSupabaseConfigured={isSupabaseConfigured}
           isAuthenticating={isCheckingAuth || isSigningIn}
@@ -387,7 +401,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Screen 2: Home Screen */}
-      {session && currentScreen === 'home' && (
+      {!isCheckingAuth && session && currentScreen === 'home' && (
         <HomeScreen
           userProfile={userProfile}
           applications={applications}
@@ -400,7 +414,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Screen 3: Upload Screenshot Screen */}
-      {session && currentScreen === 'upload' && (
+      {!isCheckingAuth && session && currentScreen === 'upload' && (
         <UploadScreen
           activeFile={uploadedFile}
           previewUrl={uploadedPreview}
@@ -419,7 +433,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Screen 4: Extracted Job Details Screen */}
-      {session && currentScreen === 'extracted-details' && (
+      {!isCheckingAuth && session && currentScreen === 'extracted-details' && (
         <ExtractedDetailsScreen
           details={extractedJob}
           onBack={() => setCurrentScreen('upload')}
@@ -435,7 +449,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Screen 5: Review Email Screen */}
-      {session && currentScreen === 'review-email' && (
+      {!isCheckingAuth && session && currentScreen === 'review-email' && (
         <ReviewEmailScreen
           recipient={emailRecipient}
           subject={emailSubject}
@@ -458,7 +472,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Screen 7: Application Sent Screen */}
-      {session && currentScreen === 'sent-success' && (
+      {!isCheckingAuth && session && currentScreen === 'sent-success' && (
         <SuccessScreen
           company={extractedJob.company}
           role={extractedJob.role}
@@ -474,7 +488,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Screen 8: Application History Screen */}
-      {session && currentScreen === 'history' && (
+      {!isCheckingAuth && session && currentScreen === 'history' && (
         <HistoryScreen
           applications={applications}
           onSelectApplication={(app) => setSelectedHistoryApp(app)}
@@ -482,7 +496,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Screen 9: Profile Screen */}
-      {session && currentScreen === 'profile' && (
+      {!isCheckingAuth && session && currentScreen === 'profile' && (
         <ProfileScreen
           userProfile={userProfile}
           onUpdateProfile={handleUpdateProfile}
@@ -490,7 +504,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Screen 10: Settings Screen */}
-      {session && currentScreen === 'settings' && (
+      {!isCheckingAuth && session && currentScreen === 'settings' && (
         <SettingsScreen
           settings={settings}
           userProfile={userProfile}
