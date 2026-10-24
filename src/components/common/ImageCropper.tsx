@@ -294,9 +294,14 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
     <div
       style={{
         position: 'fixed', inset: 0, zIndex: 9999,
+        height: '100dvh',
+        boxSizing: 'border-box',
         backgroundColor: 'rgba(0,0,0,0.88)',
         display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center'
+        alignItems: 'center', justifyContent: 'flex-start',
+        overflowY: 'auto',
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)'
       }}
     >
       {/* Header */}
@@ -304,7 +309,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
         style={{
           width: '100%', maxWidth: '412px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '14px 20px', color: '#FFFFFF'
+          padding: '10px 20px', color: '#FFFFFF', flexShrink: 0
         }}
       >
         <button
@@ -341,31 +346,38 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
       </div>
 
       {/* Tip */}
-      <p style={{ fontSize: '12px', color: '#94A3B8', marginBottom: '10px', textAlign: 'center' }}>
+      <p style={{ fontSize: '12px', color: '#94A3B8', margin: '4px 16px 8px', textAlign: 'center', flexShrink: 0 }}>
         {fileName ? `${fileName}${fileSize ? ` · ${(fileSize / (1024 * 1024)).toFixed(1)} MB` : ''} · ` : ''}
         Drag corners to resize · Drag inside to move
       </p>
 
       {/* Canvas */}
-      <div ref={containerRef} style={{ width: '100%', maxWidth: '412px', touchAction: 'none' }}>
+      <div
+        ref={containerRef}
+        style={{
+          width: '100%', maxWidth: '412px', touchAction: 'none',
+          maxHeight: '40dvh', display: 'flex', justifyContent: 'center', overflow: 'hidden',
+          flexShrink: 1
+        }}
+      >
         {imgLoaded && canvasSize.w > 0 ? (
           <canvas
             ref={canvasRef}
             width={canvasSize.w}
             height={canvasSize.h}
-            style={{ width: '100%', display: 'block', cursor: 'crosshair', touchAction: 'none' }}
+            style={{ width: '100%', maxHeight: '40dvh', objectFit: 'contain', display: 'block', cursor: 'crosshair', touchAction: 'none' }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
           />
         ) : (
-          <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}>
+          <div style={{ height: 'min(40dvh, 300px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}>
             Loading image...
           </div>
         )}
       </div>
 
-      <label style={{ width: '100%', maxWidth: '412px', padding: '12px 20px 0', color: '#CBD5E1', fontSize: '12px' }}>
+      <label style={{ width: '100%', maxWidth: '412px', padding: '8px 20px 0', color: '#CBD5E1', fontSize: '12px', flexShrink: 0 }}>
         Zoom: {zoom.toFixed(1)}×
         <input
           type="range"
@@ -384,7 +396,10 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
         style={{
           width: '100%', maxWidth: '412px',
           display: 'flex', gap: '14px',
-          padding: '18px 20px'
+          padding: '12px 20px',
+          boxSizing: 'border-box',
+          flexShrink: 0,
+          marginTop: 'auto'
         }}
       >
         <button
@@ -404,6 +419,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
           onClick={handleConfirm}
           style={{
             flex: 1.5, height: '48px', borderRadius: '14px',
+            minWidth: 0,
             background: 'linear-gradient(135deg, #7C3AED 0%, #4F46E5 100%)',
             border: 'none',
             color: '#FFFFFF', fontWeight: 700, fontSize: '14px',
