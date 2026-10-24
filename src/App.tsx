@@ -82,13 +82,14 @@ export const App: React.FC = () => {
     }
 
     let active = true;
-    let receivedAuthState = false;
+    let receivedAuthChange = false;
     const requestedScreen = initialScreenParam && ['home', 'upload', 'extracted-details', 'review-email', 'sent-success', 'history', 'profile', 'settings'].includes(initialScreenParam)
       ? initialScreenParam
       : 'home';
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!active) return;
-      receivedAuthState = true;
+      if (event === 'INITIAL_SESSION' && receivedAuthChange) return;
+      if (event !== 'INITIAL_SESSION') receivedAuthChange = true;
       setSession(nextSession);
       setGmailAccessToken(nextSession?.provider_token || null);
       setIntegrationError(null);
@@ -104,8 +105,18 @@ export const App: React.FC = () => {
       setIsCheckingAuth(false);
     });
 
+    supabase.auth.initialize().then(({ error }) => {
+      if (!active || !error) return;
+      setIntegrationError(`Google sign-in callback failed: ${error.message}`);
+      setIsCheckingAuth(false);
+    }).catch((error: Error) => {
+      if (!active) return;
+      setIntegrationError(`Google sign-in callback failed: ${error.message}`);
+      setIsCheckingAuth(false);
+    });
+
     supabase.auth.getSession().then(({ data, error }) => {
-      if (!active || receivedAuthState) return;
+      if (!active || receivedAuthChange) return;
       if (error) {
         setIntegrationError(`Could not restore your account session: ${error.message}`);
         setIsCheckingAuth(false);
@@ -116,7 +127,7 @@ export const App: React.FC = () => {
       if (data.session) setCurrentScreen(requestedScreen);
       setIsCheckingAuth(false);
     }).catch((error: Error) => {
-      if (!active || receivedAuthState) return;
+      if (!active || receivedAuthChange) return;
       setIntegrationError(`Could not restore your account session: ${error.message}`);
       setIsCheckingAuth(false);
     });
