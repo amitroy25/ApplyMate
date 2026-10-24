@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Check, CropIcon, RotateCcw, RotateCw } from 'lucide-react';
+import { Check, CropIcon, Minus, Plus, RotateCcw, RotateCw } from 'lucide-react';
 
 interface CropRect {
   x: number; // 0-1 fraction of displayed image
@@ -16,7 +16,7 @@ interface ImageCropperProps {
   fileSize?: number;
 }
 
-type Handle = 'tl' | 'tr' | 'bl' | 'br' | 'move' | null;
+type Handle = 'tl' | 'tm' | 'tr' | 'ml' | 'mr' | 'bl' | 'bm' | 'br' | 'move' | null;
 
 const MIN_FRAC = 0.08; // minimum crop size as fraction of image
 
@@ -114,25 +114,29 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
         ctx.stroke();
       }
 
-      // Use standard L-shaped handles so the crop boundary is easy to grab.
-      const handleLength = Math.min(22, cWidth * 0.18, cHeight * 0.18);
-      ctx.strokeStyle = '#FFFFFF';
-      ctx.lineWidth = 3;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(cx, cy + handleLength);
-      ctx.lineTo(cx, cy);
-      ctx.lineTo(cx + handleLength, cy);
-      ctx.moveTo(cx + cWidth - handleLength, cy);
-      ctx.lineTo(cx + cWidth, cy);
-      ctx.lineTo(cx + cWidth, cy + handleLength);
-      ctx.moveTo(cx, cy + cHeight - handleLength);
-      ctx.lineTo(cx, cy + cHeight);
-      ctx.lineTo(cx + handleLength, cy + cHeight);
-      ctx.moveTo(cx + cWidth - handleLength, cy + cHeight);
-      ctx.lineTo(cx + cWidth, cy + cHeight);
-      ctx.lineTo(cx + cWidth, cy + cHeight - handleLength);
-      ctx.stroke();
+      const markers = [
+        [cx, cy], [cx + cWidth / 2, cy], [cx + cWidth, cy],
+        [cx, cy + cHeight / 2], [cx + cWidth, cy + cHeight / 2],
+        [cx, cy + cHeight], [cx + cWidth / 2, cy + cHeight], [cx + cWidth, cy + cHeight]
+      ];
+      markers.forEach(([x, y]) => {
+        ctx.beginPath();
+        ctx.arc(x, y, 10, 0, Math.PI * 2);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fill();
+        ctx.strokeStyle = '#4F46E5';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x - 4, y);
+        ctx.lineTo(x + 4, y);
+        ctx.moveTo(x, y - 4);
+        ctx.lineTo(x, y + 4);
+        ctx.strokeStyle = '#4F46E5';
+        ctx.lineWidth = 1.5;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      });
     },
     [imgLoaded, rotation, zoom]
   );
@@ -183,16 +187,23 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
   }
 
   function hitHandle(fx: number, fy: number, c: CropRect): Handle {
-    const THRESH = 0.06;
-    const nearL = Math.abs(fx - c.x) < THRESH;
-    const nearR = Math.abs(fx - (c.x + c.w)) < THRESH;
-    const nearT = Math.abs(fy - c.y) < THRESH;
-    const nearB = Math.abs(fy - (c.y + c.h)) < THRESH;
+    const canvas = canvasRef.current;
+    const rect = canvas?.getBoundingClientRect();
+    const thresholdX = rect ? 22 / rect.width : 0.06;
+    const thresholdY = rect ? 22 / rect.height : 0.06;
+    const nearL = Math.abs(fx - c.x) < thresholdX;
+    const nearR = Math.abs(fx - (c.x + c.w)) < thresholdX;
+    const nearT = Math.abs(fy - c.y) < thresholdY;
+    const nearB = Math.abs(fy - (c.y + c.h)) < thresholdY;
 
     if (nearL && nearT) return 'tl';
     if (nearR && nearT) return 'tr';
     if (nearL && nearB) return 'bl';
     if (nearR && nearB) return 'br';
+    if (nearT && fx > c.x + thresholdX && fx < c.x + c.w - thresholdX) return 'tm';
+    if (nearB && fx > c.x + thresholdX && fx < c.x + c.w - thresholdX) return 'bm';
+    if (nearL && fy > c.y + thresholdY && fy < c.y + c.h - thresholdY) return 'ml';
+    if (nearR && fy > c.y + thresholdY && fy < c.y + c.h - thresholdY) return 'mr';
     if (fx > c.x && fx < c.x + c.w && fy > c.y && fy < c.y + c.h) return 'move';
     return null;
   }
@@ -222,30 +233,28 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
         y = Math.max(0, Math.min(1 - o.h, o.y + dy));
         w = o.w;
         h = o.h;
-      } else if (handle === 'tl') {
-        x = Math.min(o.x + dx, o.x + o.w - MIN_FRAC);
-        y = Math.min(o.y + dy, o.y + o.h - MIN_FRAC);
-        w = o.w - (x - o.x);
-        h = o.h - (y - o.y);
-        x = Math.max(0, x); y = Math.max(0, y);
-        w = Math.max(MIN_FRAC, w); h = Math.max(MIN_FRAC, h);
-      } else if (handle === 'tr') {
-        y = Math.min(o.y + dy, o.y + o.h - MIN_FRAC);
-        h = o.h - (y - o.y);
-        w = Math.max(MIN_FRAC, Math.min(1 - o.x, o.w + dx));
-        y = Math.max(0, y); h = Math.max(MIN_FRAC, h);
-      } else if (handle === 'bl') {
-        x = Math.min(o.x + dx, o.x + o.w - MIN_FRAC);
-        w = o.w - (x - o.x);
-        h = Math.max(MIN_FRAC, Math.min(1 - o.y, o.h + dy));
-        x = Math.max(0, x); w = Math.max(MIN_FRAC, w);
-      } else if (handle === 'br') {
-        w = Math.max(MIN_FRAC, Math.min(1 - o.x, o.w + dx));
-        h = Math.max(MIN_FRAC, Math.min(1 - o.y, o.h + dy));
+      } else {
+        let left = o.x;
+        let top = o.y;
+        let right = o.x + o.w;
+        let bottom = o.y + o.h;
+        if (handle === 'tl' || handle === 'ml' || handle === 'bl') {
+          left = Math.max(0, Math.min(right - MIN_FRAC, o.x + dx));
+        }
+        if (handle === 'tr' || handle === 'mr' || handle === 'br') {
+          right = Math.min(1, Math.max(left + MIN_FRAC, o.x + o.w + dx));
+        }
+        if (handle === 'tl' || handle === 'tm' || handle === 'tr') {
+          top = Math.max(0, Math.min(bottom - MIN_FRAC, o.y + dy));
+        }
+        if (handle === 'bl' || handle === 'bm' || handle === 'br') {
+          bottom = Math.min(1, Math.max(top + MIN_FRAC, o.y + o.h + dy));
+        }
+        x = left;
+        y = top;
+        w = right - left;
+        h = bottom - top;
       }
-      // Clamp to canvas bounds
-      if (x + w > 1) w = 1 - x;
-      if (y + h > 1) h = 1 - y;
       return { x, y, w, h };
     });
   };
@@ -266,6 +275,10 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
   const rotateImage = () => {
     setRotation((current) => (current + 90) % 360);
     setCrop({ x: 0.05, y: 0.05, w: 0.9, h: 0.9 });
+  };
+
+  const updateZoom = (amount: number) => {
+    setZoom((current) => Math.max(1, Math.min(3, Math.round((current + amount) * 10) / 10)));
   };
 
   // ------------------------------------------------------------------
@@ -358,7 +371,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
             ref={canvasRef}
             width={canvasSize.w}
             height={canvasSize.h}
-            style={{ width: '100%', maxHeight: '46dvh', objectFit: 'contain', display: 'block', cursor: 'crosshair', touchAction: 'none' }}
+            style={{ width: 'auto', height: 'auto', maxWidth: '100%', maxHeight: '46dvh', objectFit: 'contain', display: 'block', cursor: 'crosshair', touchAction: 'none' }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
@@ -399,6 +412,21 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
         >
           <RotateCw size={19} />
         </button>
+        <button
+          type="button"
+          onClick={() => updateZoom(-0.1)}
+          title="Zoom out"
+          aria-label="Zoom out"
+          disabled={zoom <= 1}
+          style={{
+            width: '34px', height: '38px', flexShrink: 0, borderRadius: '10px',
+            background: '#1D2737', border: '1px solid #354156',
+            color: zoom <= 1 ? '#64748B' : '#E2E8F0', cursor: zoom <= 1 ? 'default' : 'pointer',
+            display: 'grid', placeItems: 'center'
+          }}
+        >
+          <Minus size={17} />
+        </button>
         <label style={{ minWidth: 0, flex: 1, color: '#E2E8F0', fontSize: '12px', fontWeight: 600 }}>
           <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <span>Zoom</span>
@@ -415,6 +443,21 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
             style={{ display: 'block', width: '100%', margin: 0, accentColor: '#818CF8' }}
           />
         </label>
+        <button
+          type="button"
+          onClick={() => updateZoom(0.1)}
+          title="Zoom in"
+          aria-label="Zoom in"
+          disabled={zoom >= 3}
+          style={{
+            width: '34px', height: '38px', flexShrink: 0, borderRadius: '10px',
+            background: '#1D2737', border: '1px solid #354156',
+            color: zoom >= 3 ? '#64748B' : '#E2E8F0', cursor: zoom >= 3 ? 'default' : 'pointer',
+            display: 'grid', placeItems: 'center'
+          }}
+        >
+          <Plus size={17} />
+        </button>
       </div>
 
       {/* Primary action */}
