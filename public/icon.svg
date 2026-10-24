@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4F46E5" />
+      <stop offset="100%" stop-color="#7C3AED" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#4F46E5" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#grad)" filter="url(#shadow)" />
+  <!-- Briefcase Icon -->
+  <path d="M176 160V128C176 110.3 190.3 96 208 96H304C321.7 96 336 110.3 336 128V160H416C433.7 160 448 174.3 448 192V384C448 401.7 433.7 416 416 416H96C78.3 416 64 401.7 64 384V192C64 174.3 78.3 160 96 160H176ZM208 128V160H304V128H208ZM96 208V256C96 264.8 103.2 272 112 272H224V288C224 296.8 231.2 304 240 304H272C280.8 304 288 296.8 288 288V272H400C408.8 272 416 264.8 416 256V208H96Z" fill="#FFFFFF"/>
+</svg>
