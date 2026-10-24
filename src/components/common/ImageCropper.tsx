@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { X, Check, CropIcon, RotateCcw, RotateCw } from 'lucide-react';
+import { Check, CropIcon, RotateCcw, RotateCw } from 'lucide-react';
 
 interface CropRect {
   x: number; // 0-1 fraction of displayed image
@@ -114,16 +114,25 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
         ctx.stroke();
       }
 
-      // Corner handles
-      const hs = 14;
-      const corners = [
-        [cx, cy],
-        [cx + cWidth - hs, cy],
-        [cx, cy + cHeight - hs],
-        [cx + cWidth - hs, cy + cHeight - hs]
-      ];
-      ctx.fillStyle = '#FFFFFF';
-      corners.forEach(([hx, hy]) => ctx.fillRect(hx, hy, hs, hs));
+      // Use standard L-shaped handles so the crop boundary is easy to grab.
+      const handleLength = Math.min(22, cWidth * 0.18, cHeight * 0.18);
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx, cy + handleLength);
+      ctx.lineTo(cx, cy);
+      ctx.lineTo(cx + handleLength, cy);
+      ctx.moveTo(cx + cWidth - handleLength, cy);
+      ctx.lineTo(cx + cWidth, cy);
+      ctx.lineTo(cx + cWidth, cy + handleLength);
+      ctx.moveTo(cx, cy + cHeight - handleLength);
+      ctx.lineTo(cx, cy + cHeight);
+      ctx.lineTo(cx + handleLength, cy + cHeight);
+      ctx.moveTo(cx + cWidth - handleLength, cy + cHeight);
+      ctx.lineTo(cx + cWidth, cy + cHeight);
+      ctx.lineTo(cx + cWidth, cy + cHeight - handleLength);
+      ctx.stroke();
     },
     [imgLoaded, rotation, zoom]
   );
@@ -296,12 +305,12 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
         position: 'fixed', inset: 0, zIndex: 9999,
         height: '100dvh',
         boxSizing: 'border-box',
-        backgroundColor: 'rgba(0,0,0,0.88)',
+        backgroundColor: '#090D16',
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'flex-start',
         overflowY: 'auto',
-        paddingTop: 'env(safe-area-inset-top)',
-        paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)'
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)'
       }}
     >
       {/* Header */}
@@ -309,55 +318,39 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
         style={{
           width: '100%', maxWidth: '412px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '10px 20px', color: '#FFFFFF', flexShrink: 0
+          padding: '12px 20px', color: '#FFFFFF', flexShrink: 0
         }}
       >
         <button
           type="button"
           onClick={onCancel}
-          style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px' }}
+          style={{ background: 'none', border: 'none', color: '#A5B4FC', cursor: 'pointer', padding: '8px 0', fontSize: '14px', fontWeight: 600 }}
         >
-          <X size={22} />
+          Cancel
         </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '15px' }}>
-          <CropIcon size={17} color="#818CF8" />
-          <span>Crop Screenshot</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '16px' }}>
+          <CropIcon size={17} color="#A5B4FC" />
+          <span>Crop image</span>
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button
-            type="button"
-            onClick={rotateImage}
-            title="Rotate 90 degrees"
-            aria-label="Rotate screenshot 90 degrees"
-            style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px' }}
-          >
-            <RotateCw size={18} />
-          </button>
-          <button
-            type="button"
-            onClick={resetCrop}
-            title="Reset crop and image adjustments"
-            aria-label="Reset crop and image adjustments"
-            style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px' }}
-          >
-            <RotateCcw size={18} />
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={resetCrop}
+          title="Reset crop and image adjustments"
+          aria-label="Reset crop and image adjustments"
+          style={{ background: 'transparent', border: '1px solid #30394A', color: '#E2E8F0', cursor: 'pointer', width: '38px', height: '38px', borderRadius: '12px', display: 'grid', placeItems: 'center' }}
+        >
+          <RotateCcw size={17} />
+        </button>
       </div>
 
-      {/* Tip */}
-      <p style={{ fontSize: '12px', color: '#94A3B8', margin: '4px 16px 8px', textAlign: 'center', flexShrink: 0 }}>
-        {fileName ? `${fileName}${fileSize ? ` · ${(fileSize / (1024 * 1024)).toFixed(1)} MB` : ''} · ` : ''}
-        Drag corners to resize · Drag inside to move
-      </p>
-
-      {/* Canvas */}
+      {/* Image stage */}
       <div
         ref={containerRef}
         style={{
-          width: '100%', maxWidth: '412px', touchAction: 'none',
-          maxHeight: '40dvh', display: 'flex', justifyContent: 'center', overflow: 'hidden',
-          flexShrink: 1
+          width: 'calc(100% - 32px)', maxWidth: '460px', touchAction: 'none',
+          maxHeight: '48dvh', minHeight: '180px', display: 'flex', justifyContent: 'center', alignItems: 'center',
+          overflow: 'hidden', flexShrink: 1, margin: '8px 16px 0',
+          background: '#111827', border: '1px solid #293244', borderRadius: '18px', padding: '10px'
         }}
       >
         {imgLoaded && canvasSize.w > 0 ? (
@@ -365,71 +358,85 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({ imageUrl, onCrop, on
             ref={canvasRef}
             width={canvasSize.w}
             height={canvasSize.h}
-            style={{ width: '100%', maxHeight: '40dvh', objectFit: 'contain', display: 'block', cursor: 'crosshair', touchAction: 'none' }}
+            style={{ width: '100%', maxHeight: '46dvh', objectFit: 'contain', display: 'block', cursor: 'crosshair', touchAction: 'none' }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
           />
         ) : (
-          <div style={{ height: 'min(40dvh, 300px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}>
+          <div style={{ height: 'min(46dvh, 380px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8' }}>
             Loading image...
           </div>
         )}
       </div>
 
-      <label style={{ width: '100%', maxWidth: '412px', padding: '8px 20px 0', color: '#CBD5E1', fontSize: '12px', flexShrink: 0 }}>
-        Zoom: {zoom.toFixed(1)}×
-        <input
-          type="range"
-          aria-label="Zoom screenshot"
-          min="1"
-          max="3"
-          step="0.1"
-          value={zoom}
-          onChange={(event) => setZoom(Number(event.target.value))}
-          style={{ display: 'block', width: '100%', marginTop: '8px', accentColor: '#818CF8' }}
-        />
-      </label>
+      <p style={{ fontSize: '12px', color: '#94A3B8', margin: '10px 16px 4px', textAlign: 'center', flexShrink: 0 }}>
+        Drag the corners to adjust the crop
+        {fileName && <span style={{ display: 'block', marginTop: '3px', color: '#64748B' }}>{fileName}{fileSize ? ` · ${(fileSize / (1024 * 1024)).toFixed(1)} MB` : ''}</span>}
+      </p>
 
-      {/* Footer buttons */}
+      {/* Editing tools */}
       <div
         style={{
-          width: '100%', maxWidth: '412px',
-          display: 'flex', gap: '14px',
-          padding: '12px 20px',
+          width: 'calc(100% - 32px)', maxWidth: '460px',
+          display: 'flex', alignItems: 'center', gap: '16px',
+          padding: '12px 14px', marginTop: '12px',
           boxSizing: 'border-box',
-          flexShrink: 0,
-          marginTop: 'auto'
+          flexShrink: 0, border: '1px solid #293244', borderRadius: '16px',
+          background: '#111827'
         }}
       >
         <button
           type="button"
-          onClick={onCancel}
+          onClick={rotateImage}
+          title="Rotate 90 degrees"
+          aria-label="Rotate screenshot 90 degrees"
           style={{
-            flex: 1, height: '48px', borderRadius: '14px',
-            background: 'rgba(255,255,255,0.08)',
-            border: '1px solid rgba(255,255,255,0.15)',
-            color: '#CBD5E1', fontWeight: 700, fontSize: '14px', cursor: 'pointer'
+            width: '44px', height: '44px', flexShrink: 0, borderRadius: '12px',
+            background: '#1D2737', border: '1px solid #354156',
+            color: '#E2E8F0', cursor: 'pointer', display: 'grid', placeItems: 'center'
           }}
         >
-          Cancel
+          <RotateCw size={19} />
         </button>
+        <label style={{ minWidth: 0, flex: 1, color: '#E2E8F0', fontSize: '12px', fontWeight: 600 }}>
+          <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <span>Zoom</span>
+            <span style={{ color: '#A5B4FC', fontVariantNumeric: 'tabular-nums' }}>{Math.round(zoom * 100)}%</span>
+          </span>
+          <input
+            type="range"
+            aria-label="Zoom screenshot"
+            min="1"
+            max="3"
+            step="0.1"
+            value={zoom}
+            onChange={(event) => setZoom(Number(event.target.value))}
+            style={{ display: 'block', width: '100%', margin: 0, accentColor: '#818CF8' }}
+          />
+        </label>
+      </div>
+
+      {/* Primary action */}
+      <div
+        style={{
+          width: '100%', maxWidth: '492px', marginTop: 'auto',
+          padding: '16px 16px 12px', boxSizing: 'border-box', flexShrink: 0
+        }}
+      >
         <button
           type="button"
           onClick={handleConfirm}
           style={{
-            flex: 1.5, height: '48px', borderRadius: '14px',
-            minWidth: 0,
-            background: 'linear-gradient(135deg, #7C3AED 0%, #4F46E5 100%)',
-            border: 'none',
-            color: '#FFFFFF', fontWeight: 700, fontSize: '14px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-            cursor: 'pointer',
-            boxShadow: '0 6px 18px rgba(124,58,237,0.45)'
+            width: '100%', height: '54px', borderRadius: '16px',
+            background: '#4F46E5', border: 'none',
+            color: '#FFFFFF', fontWeight: 700, fontSize: '15px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px',
+            cursor: 'pointer', boxShadow: '0 8px 22px rgba(79,70,229,0.28)'
           }}
         >
-          <Check size={18} />
-          Use Cropped Image
+          <Check size={19} />
+          Use cropped image
         </button>
       </div>
     </div>
