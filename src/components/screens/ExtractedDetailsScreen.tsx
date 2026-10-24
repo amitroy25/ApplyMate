@@ -133,7 +133,7 @@ export const ExtractedDetailsScreen: React.FC<ExtractedDetailsScreenProps> = ({
   const isEmailMissing = !details.email || details.email.trim() === '';
 
   return (
-    <div className="screen-scroll-container no-nav" style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+    <div className="screen-scroll-container no-nav" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
       <div>
         {/* Top Header */}
         <div className="app-header">

@@ -38,7 +38,6 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
-        height: '100%',
         padding: '32px 20px',
         textAlign: 'center'
       }}

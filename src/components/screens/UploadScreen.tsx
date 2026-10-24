@@ -107,7 +107,7 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
   const displayUrl = croppedUrl || previewUrl;
 
   return (
-    <div className="screen-scroll-container no-nav" style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+    <div className="screen-scroll-container no-nav" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
       {/* Crop Modal — full-screen overlay */}
       {showCropper && previewUrl && (
         <ImageCropper

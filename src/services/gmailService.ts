@@ -26,12 +26,52 @@ function wrapBase64(value: string): string {
   return value.match(/.{1,76}/g)?.join('\r\n') || '';
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function formatEmailBodyHtml(body: string, emphasizedText: string[] = []): string {
+  const escapedBody = escapeHtml(body);
+  const phrases = Array.from(new Set(emphasizedText.map((value) => value.trim()).filter(Boolean)))
+    .sort((left, right) => right.length - left.length);
+  const phrasePattern = phrases.length
+    ? new RegExp(phrases.map((phrase) => escapeRegExp(escapeHtml(phrase))).join('|'), 'gi')
+    : null;
+
+  return escapedBody
+    .split(/\n{2,}/)
+    .map((paragraph, index) => {
+      let formatted = paragraph.replace(/\n/g, '<br>');
+      if (phrasePattern) {
+        formatted = formatted.replace(phrasePattern, '<strong>$&</strong>');
+      }
+      formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      if (index === 0 && /^(hi|hello|dear)\b/i.test(paragraph.trim())) {
+        formatted = `<strong>${formatted}</strong>`;
+      }
+      return `<p style="margin:0 0 16px">${formatted}</p>`;
+    })
+    .join('')
+    .replace(/^/, '<div style="font-family:Arial,Helvetica,sans-serif;color:#1f2937;font-size:14px;line-height:1.7">')
+    .concat('</div>');
+}
+
 export function encodeRawMessage(
   recipient: string,
   subject: string,
   body: string,
   file: Blob,
-  fileName: string
+  fileName: string,
+  emphasizedText: string[] = []
 ): Promise<string> {
   const normalizedRecipient = recipient.trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedRecipient) || /[\r\n]/.test(normalizedRecipient)) {
@@ -49,8 +89,10 @@ export function encodeRawMessage(
 
   return file.arrayBuffer().then((buffer) => {
     const boundary = `jobapply_${crypto.randomUUID().replace(/-/g, '')}`;
+    const alternativeBoundary = `jobapply_alt_${crypto.randomUUID().replace(/-/g, '')}`;
     const attachment = wrapBase64(encodeBase64(new Uint8Array(buffer)));
     const encodedBody = wrapBase64(encodeBase64(new TextEncoder().encode(body)));
+    const encodedHtmlBody = wrapBase64(encodeBase64(new TextEncoder().encode(formatEmailBodyHtml(body, emphasizedText))));
     const safeFileName = fileName.replace(/["\r\n]/g, '_');
     const mimeMessage = [
       `To: ${normalizedRecipient}`,
@@ -59,10 +101,20 @@ export function encodeRawMessage(
       `Content-Type: multipart/mixed; boundary="${boundary}"`,
       '',
       `--${boundary}`,
+      `Content-Type: multipart/alternative; boundary="${alternativeBoundary}"`,
+      '',
+      `--${alternativeBoundary}`,
       'Content-Type: text/plain; charset="UTF-8"',
       'Content-Transfer-Encoding: base64',
       '',
       encodedBody,
+      `--${alternativeBoundary}`,
+      'Content-Type: text/html; charset="UTF-8"',
+      'Content-Transfer-Encoding: base64',
+      '',
+      encodedHtmlBody,
+      `--${alternativeBoundary}--`,
+      '',
       `--${boundary}`,
       `Content-Type: application/pdf; name="${safeFileName}"`,
       'Content-Transfer-Encoding: base64',
@@ -85,10 +137,11 @@ export async function sendGmailMessage(
   subject: string,
   body: string,
   resume: Blob,
-  fileName: string
+  fileName: string,
+  emphasizedText: string[] = []
 ): Promise<string> {
   if (!accessToken) throw new Error('Gmail authorization expired. Reconnect your Google account in Settings.');
-  const raw = await encodeRawMessage(recipient, subject, body, resume, fileName);
+  const raw = await encodeRawMessage(recipient, subject, body, resume, fileName, emphasizedText);
   let response: Response;
   try {
     response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {

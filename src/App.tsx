@@ -327,7 +327,8 @@ export const App: React.FC = () => {
         emailSubject,
         emailBody,
         resume,
-        userProfile.resumeFileName
+        userProfile.resumeFileName,
+        [extractedJob.role, extractedJob.company, ...extractedJob.skills]
       );
       const sentAt = new Date().toISOString();
 

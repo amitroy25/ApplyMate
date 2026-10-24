@@ -51,7 +51,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   };
 
   return (
-    <div className="screen-scroll-container no-nav" style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+    <div className="screen-scroll-container no-nav" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
       <div>
         {/* Header */}
         <div className="app-header">
@@ -197,7 +197,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 style={{ border: 'none', padding: '0', fontSize: '12px' }}
               />
               <span style={{ fontSize: '11px', color: 'var(--text-subtle)', marginTop: '4px', display: 'block' }}>
-                Variables: {'{role}'}, {'{company}'}, {'{matched_skills}'}, {'{signature}'}
+                Variables: {'{role}'}, {'{company}'}, {'{matched_skills}'}, {'{signature}'}. The sent email highlights these details; use **text** to bold other phrases.
               </span>
             </div>
           </div>

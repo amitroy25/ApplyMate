@@ -15,7 +15,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   onSignIn
 }) => {
   return (
-    <div className="screen-scroll-container no-nav" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', minHeight: '100%', justifyContent: 'space-between' }}>
+    <div className="screen-scroll-container no-nav" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
       <div>
         {/* App Logo */}
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: '8px', marginBottom: '12px' }}>

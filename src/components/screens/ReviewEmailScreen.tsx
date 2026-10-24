@@ -48,7 +48,7 @@ export const ReviewEmailScreen: React.FC<ReviewEmailScreenProps> = ({
   };
 
   return (
-    <div className="screen-scroll-container no-nav" style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+    <div className="screen-scroll-container no-nav" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
       <div>
         {/* Header */}
         <div className="app-header">
@@ -132,6 +132,9 @@ export const ReviewEmailScreen: React.FC<ReviewEmailScreenProps> = ({
                 padding: '12px'
               }}
             />
+            <span style={{ display: 'block', marginTop: '8px', fontSize: '11px', lineHeight: 1.5, color: 'var(--text-muted)' }}>
+              The sent email highlights the greeting, role, company, and skills. Wrap any other text in **double asterisks** to bold it.
+            </span>
           </div>
 
           {/* Attached Resume */}

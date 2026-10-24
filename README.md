@@ -172,7 +172,8 @@ Before calling Gmail, the app saves an application as `Sending`. A successful Gm
 
 * OCR text recognition and parsing, optional Gemini cleanup, and editable generated email drafts.
 * Supabase Google OAuth, per-user Postgres data, and private PDF resume storage (requires setup above).
-* Confirmed Gmail API sending with a PDF MIME attachment and explicit sending/sent/failed states.
+* Confirmed Gmail API sending with a PDF MIME attachment, plain-text and formatted HTML email alternatives, and explicit sending/sent/failed states.
+* Responsive full-height phone layout with dynamic viewport and safe-area support.
 * Daily sent count, with a default target of 20 applications.
 
 ### Remaining before public launch
