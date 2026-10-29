@@ -42,6 +42,28 @@ import { GmailDeliveryUncertainError, googleOAuthScopes, sendGmailMessage } from
 import { isSupabaseConfigured, supabase } from './services/supabaseClient';
 import { deleteSharedImage, loadSharedImage } from './services/sharedImageService';
 
+const SIGNED_IN_SCREENS: ScreenName[] = [
+  'home',
+  'upload',
+  'extracted-details',
+  'review-email',
+  'sending',
+  'sent-success',
+  'history',
+  'profile',
+  'settings'
+];
+const LAST_SCREEN_STORAGE_KEY = 'applymate_last_screen';
+
+function getLastSignedInScreen(): ScreenName {
+  try {
+    const savedScreen = sessionStorage.getItem(LAST_SCREEN_STORAGE_KEY) as ScreenName | null;
+    return savedScreen && SIGNED_IN_SCREENS.includes(savedScreen) ? savedScreen : 'home';
+  } catch {
+    return 'home';
+  }
+}
+
 export const App: React.FC = () => {
   const searchParams = new URLSearchParams(window.location.search);
   const initialScreenParam = searchParams.get('screen') as ScreenName | null;
@@ -91,11 +113,12 @@ export const App: React.FC = () => {
 
     let active = true;
     let receivedAuthChange = false;
-    const requestedScreen = initialScreenParam && ['home', 'upload', 'extracted-details', 'review-email', 'sent-success', 'history', 'profile', 'settings'].includes(initialScreenParam)
+    let wasAuthenticated = false;
+    const requestedScreen = initialScreenParam && SIGNED_IN_SCREENS.includes(initialScreenParam)
       ? initialScreenParam
       : sharedImageId || sharedImageError
         ? 'upload'
-        : 'home';
+        : getLastSignedInScreen();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!active) return;
       if (event === 'INITIAL_SESSION' && receivedAuthChange) return;
@@ -104,13 +127,26 @@ export const App: React.FC = () => {
       setGmailAccessToken(nextSession?.provider_token || null);
       if (nextSession) setIntegrationError(null);
       if (event === 'INITIAL_SESSION') {
+        wasAuthenticated = Boolean(nextSession);
         setCurrentScreen(nextSession ? requestedScreen : 'welcome');
         setIsSigningIn(false);
         setIsCheckingAuth(false);
         return;
       }
-      if (event === 'SIGNED_IN') setCurrentScreen(sharedImageId || sharedImageError ? 'upload' : 'home');
-      if (event === 'SIGNED_OUT') setCurrentScreen('welcome');
+      if (event === 'SIGNED_IN' && !wasAuthenticated) {
+        setCurrentScreen(sharedImageId || sharedImageError ? 'upload' : 'home');
+      }
+      if (event === 'SIGNED_OUT') {
+        wasAuthenticated = false;
+        try {
+          sessionStorage.removeItem(LAST_SCREEN_STORAGE_KEY);
+        } catch {
+          setIntegrationError('Could not clear the saved screen from this browser session.');
+        }
+        setCurrentScreen('welcome');
+      } else if (nextSession) {
+        wasAuthenticated = true;
+      }
       setIsSigningIn(false);
       setIsCheckingAuth(false);
     });
@@ -133,6 +169,7 @@ export const App: React.FC = () => {
         return;
       }
       setSession(data.session);
+      wasAuthenticated = Boolean(data.session);
       setGmailAccessToken(data.session?.provider_token || null);
       if (data.session) setCurrentScreen(requestedScreen);
       setIsCheckingAuth(false);
@@ -147,6 +184,15 @@ export const App: React.FC = () => {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!session?.user || currentScreen === 'welcome') return;
+    try {
+      sessionStorage.setItem(LAST_SCREEN_STORAGE_KEY, currentScreen);
+    } catch (error) {
+      setIntegrationError(`Could not preserve your current screen in this browser session: ${(error as Error).message}`);
+    }
+  }, [currentScreen, session?.user.id]);
 
   useEffect(() => {
     if (!sharedImageId || !session?.user) return;
@@ -332,6 +378,11 @@ export const App: React.FC = () => {
     setApplications([]);
     setUserProfile(initialUserProfile);
     setSettings(initialSettings);
+    try {
+      sessionStorage.removeItem(LAST_SCREEN_STORAGE_KEY);
+    } catch (error) {
+      setIntegrationError(`Disconnected, but could not clear the saved screen: ${(error as Error).message}`);
+    }
   };
 
   const handleUpdateProfile = async (updated: UserProfile, resumeFile?: File): Promise<UserProfile> => {

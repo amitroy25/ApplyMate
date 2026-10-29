@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { User, Phone, Briefcase, Code, FileText, CheckCircle2, ChevronRight, Edit3, X, Mail } from 'lucide-react';
+import { User, Phone, Briefcase, Code, FileText, CheckCircle2, ChevronRight, Edit3, X, Mail, Loader2 } from 'lucide-react';
 import { UserProfile } from '../../types';
 
 interface ProfileScreenProps {
@@ -278,7 +278,12 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               }}
               type="button"
             >
-              Change
+              {isSaving ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }} role="status">
+                  <Loader2 size={13} className="animate-spin" />
+                  Uploading...
+                </span>
+              ) : 'Change'}
             </button>
           </div>
         </div>
