@@ -5,12 +5,18 @@ import { UserProfile } from '../../types';
 interface ProfileScreenProps {
   userProfile: UserProfile;
   isProfileReady: boolean;
+  isProfileLoading: boolean;
+  profileLoadError: string | null;
+  onRetryProfileLoad: () => void;
   onUpdateProfile: (updated: UserProfile, resumeFile?: File) => Promise<UserProfile>;
 }
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   userProfile,
   isProfileReady,
+  isProfileLoading,
+  profileLoadError,
+  onRetryProfileLoad,
   onUpdateProfile
 }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -84,8 +90,22 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         </div>
       )}
       {!isProfileReady && (
-        <div role="status" style={{ margin: '0 20px 12px', color: '#475569', backgroundColor: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: '10px', padding: '10px 12px', fontSize: '12px' }}>
-          Your account profile is loading or unavailable. Resume upload is disabled until your account data is ready.
+        <div role={profileLoadError ? 'alert' : 'status'} style={{ margin: '0 20px 12px', color: profileLoadError ? '#991B1B' : '#475569', backgroundColor: profileLoadError ? '#FEF2F2' : '#F1F5F9', border: `1px solid ${profileLoadError ? '#FECACA' : '#CBD5E1'}`, borderRadius: '10px', padding: '10px 12px', fontSize: '12px' }}>
+          {profileLoadError
+            ? `Could not load this account's profile: ${profileLoadError}`
+            : isProfileLoading
+              ? 'Loading your account profile...'
+              : 'Resume upload is unavailable until your account profile has loaded.'}
+          {profileLoadError && (
+            <button
+              type="button"
+              onClick={onRetryProfileLoad}
+              disabled={isProfileLoading}
+              style={{ display: 'block', marginTop: '8px', padding: 0, border: 0, background: 'none', color: '#991B1B', fontWeight: 700, textDecoration: 'underline', cursor: isProfileLoading ? 'wait' : 'pointer' }}
+            >
+              {isProfileLoading ? 'Retrying...' : 'Retry profile load'}
+            </button>
+          )}
         </div>
       )}
 

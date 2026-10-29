@@ -55,6 +55,8 @@ export const App: React.FC = () => {
   const [gmailAccessToken, setGmailAccessToken] = useState<string | null>(null);
   const [integrationError, setIntegrationError] = useState<string | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [workspaceReloadCount, setWorkspaceReloadCount] = useState(0);
   const [loadedWorkspaceUserId, setLoadedWorkspaceUserId] = useState<string | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(isSupabaseConfigured);
   const [isSigningIn, setIsSigningIn] = useState(false);
@@ -208,6 +210,7 @@ export const App: React.FC = () => {
 
     let active = true;
     setWorkspaceLoading(true);
+    setWorkspaceError(null);
     setLoadedWorkspaceUserId(null);
     setUserProfile({
       ...initialUserProfile,
@@ -232,10 +235,14 @@ export const App: React.FC = () => {
         setSettings(workspace.settings);
         setApplications(workspace.applications);
         setLoadedWorkspaceUserId(session.user.id);
+        setWorkspaceError(null);
         setIntegrationError(null);
       })
       .catch((error: Error) => {
-        if (active) setIntegrationError(`Could not load your Supabase data: ${error.message}`);
+        if (active) {
+          setWorkspaceError(error.message);
+          setIntegrationError(`Could not load your Supabase data: ${error.message}`);
+        }
       })
       .finally(() => {
         if (active) setWorkspaceLoading(false);
@@ -244,7 +251,7 @@ export const App: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [session?.user.id, session?.user.email]);
+  }, [session?.user.id, session?.user.email, workspaceReloadCount]);
 
   useEffect(() => {
     setUserProfile((profile) => ({
@@ -601,6 +608,9 @@ export const App: React.FC = () => {
         <ProfileScreen
           userProfile={userProfile}
           isProfileReady={loadedWorkspaceUserId === session.user.id}
+          isProfileLoading={workspaceLoading}
+          profileLoadError={workspaceError}
+          onRetryProfileLoad={() => setWorkspaceReloadCount((count) => count + 1)}
           onUpdateProfile={handleUpdateProfile}
         />
       )}

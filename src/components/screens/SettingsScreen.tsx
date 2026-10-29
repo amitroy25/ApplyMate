@@ -36,6 +36,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [formData, setFormData] = useState(settings);
   const [geminiKey, setGeminiKey] = useState(getSavedGeminiKey());
   const [openAiKey, setOpenAiKey] = useState(getSavedOpenAIKey());
+  const [aiKeysSaved, setAiKeysSaved] = useState(false);
   const [savedNotification, setSavedNotification] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -43,17 +44,42 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const handleSave = async () => {
     setIsSaving(true);
     setSaveError(null);
-    saveGeminiKey(geminiKey);
-    saveOpenAIKey(openAiKey);
+    try {
+      saveGeminiKey(geminiKey);
+      saveOpenAIKey(openAiKey);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSaveError(`Could not save your AI API keys: ${message}`);
+      setIsSaving(false);
+      return;
+    }
+
     try {
       await onSaveSettings(formData);
       setSavedNotification(true);
       setTimeout(() => setSavedNotification(false), 2000);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setSaveError(`${message} Your AI API keys were saved in this browser.`);
+      setSaveError(`Could not save app settings: ${message}. Your AI API keys are saved in this browser.`);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSaveAiKeys = () => {
+    setSaveError(null);
+    try {
+      saveGeminiKey(geminiKey);
+      saveOpenAIKey(openAiKey);
+      if (getSavedGeminiKey() !== geminiKey.trim() || getSavedOpenAIKey() !== openAiKey.trim()) {
+        throw new Error('The saved API keys could not be verified in this browser.');
+      }
+      setAiKeysSaved(true);
+      setTimeout(() => setAiKeysSaved(false), 2500);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setAiKeysSaved(false);
+      setSaveError(`Could not save your AI API keys: ${message}`);
     }
   };
 
@@ -162,7 +188,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   <input
                     type="password"
                     value={geminiKey}
-                    onChange={(e) => setGeminiKey(e.target.value)}
+                    onChange={(e) => {
+                      setGeminiKey(e.target.value);
+                      setAiKeysSaved(false);
+                    }}
                     placeholder="Paste your Gemini API key (AIzaSy...)"
                     className="input-field"
                     style={{ paddingLeft: '34px', fontSize: '13px' }}
@@ -191,7 +220,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   <input
                     type="password"
                     value={openAiKey}
-                    onChange={(e) => setOpenAiKey(e.target.value)}
+                    onChange={(e) => {
+                      setOpenAiKey(e.target.value);
+                      setAiKeysSaved(false);
+                    }}
                     placeholder="Paste your OpenAI API key (sk-...)"
                     className="input-field"
                     style={{ paddingLeft: '34px', fontSize: '13px' }}
@@ -203,6 +235,16 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               <span style={{ fontSize: '11px', color: 'var(--text-subtle)' }}>
                 Keys are saved only in this browser. Fix with AI tries Gemini first, then OpenAI if Gemini fails. OpenAI usage may be billed by OpenAI.
               </span>
+              <button
+                type="button"
+                onClick={handleSaveAiKeys}
+                className="btn-secondary"
+                style={{ width: '100%', minHeight: '40px', fontSize: '13px' }}
+              >
+                <Key size={15} />
+                <span>{aiKeysSaved ? 'API Keys Saved' : 'Save AI API Keys'}</span>
+                {aiKeysSaved && <Check size={15} />}
+              </button>
             </div>
           </div>
 
