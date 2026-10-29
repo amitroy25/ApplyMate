@@ -55,6 +55,7 @@ export const App: React.FC = () => {
   const [gmailAccessToken, setGmailAccessToken] = useState<string | null>(null);
   const [integrationError, setIntegrationError] = useState<string | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [loadedWorkspaceUserId, setLoadedWorkspaceUserId] = useState<string | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(isSupabaseConfigured);
   const [isSigningIn, setIsSigningIn] = useState(false);
 
@@ -207,6 +208,19 @@ export const App: React.FC = () => {
 
     let active = true;
     setWorkspaceLoading(true);
+    setLoadedWorkspaceUserId(null);
+    setUserProfile({
+      ...initialUserProfile,
+      fullName: session.user.email?.split('@')[0] || '',
+      email: session.user.email || '',
+      gmailConnected: Boolean(gmailAccessToken),
+      gmailEmail: gmailAccessToken ? session.user.email || '' : '',
+      resumeFileName: '',
+      resumeFileSize: '',
+      resumeStoragePath: undefined
+    });
+    setSettings(initialSettings);
+    setApplications([]);
     loadWorkspace(session.user.id, session.user.email || '')
       .then((workspace) => {
         if (!active) return;
@@ -217,6 +231,7 @@ export const App: React.FC = () => {
         });
         setSettings(workspace.settings);
         setApplications(workspace.applications);
+        setLoadedWorkspaceUserId(session.user.id);
         setIntegrationError(null);
       })
       .catch((error: Error) => {
@@ -314,6 +329,9 @@ export const App: React.FC = () => {
 
   const handleUpdateProfile = async (updated: UserProfile, resumeFile?: File): Promise<UserProfile> => {
     if (!session?.user) throw new Error('Connect your Google account in Settings before saving a profile or resume.');
+    if (loadedWorkspaceUserId !== session.user.id) {
+      throw new Error('Your account profile is not ready yet. Wait for it to finish loading, then try again.');
+    }
     let profileToSave = { ...updated, gmailConnected: true, gmailEmail: session.user.email || '' };
 
     if (resumeFile) {
@@ -582,6 +600,7 @@ export const App: React.FC = () => {
       {!isCheckingAuth && session && currentScreen === 'profile' && (
         <ProfileScreen
           userProfile={userProfile}
+          isProfileReady={loadedWorkspaceUserId === session.user.id}
           onUpdateProfile={handleUpdateProfile}
         />
       )}

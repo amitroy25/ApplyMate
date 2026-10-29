@@ -5,7 +5,6 @@ import { preprocessImageForOcr } from '../../services/imagePreprocessor';
 import { ExtractedJobDetails } from '../../types';
 import { defaultExtractedJob } from '../../mock/initialData';
 import { ImageCropper } from '../common/ImageCropper';
-import { fixJobDetailsWithAI, getSavedGeminiKey } from '../../services/aiService';
 import { validateSharedImage } from '../../services/sharedImageService';
 
 interface UploadScreenProps {
@@ -111,16 +110,7 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
         setOcrProgress(95);
 
         parsedDetails = parseJobText(ocrResult.text, ocrResult.confidence);
-        const geminiKey = getSavedGeminiKey();
-        if (geminiKey) {
-          setOcrStatus('Checking job details with Gemini AI...');
-          setOcrProgress(97);
-          const refined = await fixJobDetailsWithAI(ocrResult.text, parsedDetails, geminiKey);
-          if (extractionId !== extractionIdRef.current) return;
-          onExtractDetails(refined);
-        } else {
-          onExtractDetails(parsedDetails);
-        }
+        onExtractDetails(parsedDetails);
       } else {
         if (!isSamplePost) throw new Error('Choose a screenshot before extracting job details.');
         setOcrStatus('Scanning sample LinkedIn post...');

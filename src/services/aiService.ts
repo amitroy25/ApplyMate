@@ -1,6 +1,7 @@
 import { ExtractedJobDetails } from '../types';
 
 export const GEMINI_API_KEY_STORAGE = 'jobapply_gemini_api_key';
+export const OPENAI_API_KEY_STORAGE = 'jobapply_openai_api_key';
 
 export function getSavedGeminiKey(): string {
   return localStorage.getItem(GEMINI_API_KEY_STORAGE) || '';
@@ -8,6 +9,19 @@ export function getSavedGeminiKey(): string {
 
 export function saveGeminiKey(key: string): void {
   localStorage.setItem(GEMINI_API_KEY_STORAGE, key.trim());
+}
+
+export function getSavedOpenAIKey(): string {
+  return localStorage.getItem(OPENAI_API_KEY_STORAGE) || '';
+}
+
+export function saveOpenAIKey(key: string): void {
+  localStorage.setItem(OPENAI_API_KEY_STORAGE, key.trim());
+}
+
+interface GeminiModel {
+  name: string;
+  supportedGenerationMethods?: string[];
 }
 
 // Fallback candidate models in preference order
@@ -30,12 +44,12 @@ async function resolveAvailableModel(key: string): Promise<string> {
       `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`
     );
     if (listRes.ok) {
-      const listData = await listRes.json();
+      const listData = await listRes.json() as { models?: GeminiModel[] };
       const models = listData.models || [];
       // Find models that support generateContent
       const generateModels = models
-        .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
-        .map((m: any) => m.name.replace(/^models\//, ''));
+        .filter((model) => model.supportedGenerationMethods?.includes('generateContent'))
+        .map((model) => model.name.replace(/^models\//, ''));
 
       // Pick the best match from our preferred candidate list
       for (const candidate of CANDIDATE_MODELS) {
@@ -61,24 +75,8 @@ async function resolveAvailableModel(key: string): Promise<string> {
   return 'gemini-2.0-flash';
 }
 
-/**
- * Uses Gemini AI to fix and accurately structure imperfect OCR text into pristine job details.
- */
-export async function fixJobDetailsWithAI(
-  rawText: string,
-  currentDetails: ExtractedJobDetails,
-  apiKey?: string
-): Promise<ExtractedJobDetails> {
-  const key = apiKey || getSavedGeminiKey();
-
-  if (!key) {
-    throw new Error('NO_API_KEY');
-  }
-
-  // Dynamically resolve working model for this key
-  const activeModel = await resolveAvailableModel(key);
-
-  const prompt = `You are an expert LinkedIn job post analyzer.
+function createPrompt(rawText: string, currentDetails: ExtractedJobDetails): string {
+  return `You are an expert LinkedIn job post analyzer.
 Analyze the following OCR text extracted from a LinkedIn job post screenshot.
 The initial OCR might have noise, missing punctuation, spaces around emails (like "careers @ startup . com"), or formatting errors.
 Fix all fields and extract the exact structured job details.
@@ -120,10 +118,44 @@ Return strictly valid JSON matching this schema:
   "jobDescription": "string",
   "applicationInstructions": "string"
 }`;
+}
 
-  // Try the dynamically resolved model, with fallbacks across candidates if needed
+function detailsFromResponse(
+  parsed: Partial<ExtractedJobDetails>,
+  rawText: string,
+  currentDetails: ExtractedJobDetails
+): ExtractedJobDetails {
+  const rolesList = Array.isArray(parsed.candidateRoles) && parsed.candidateRoles.length > 0
+    ? parsed.candidateRoles
+    : [parsed.role || currentDetails.role];
+
+  return {
+    company: parsed.company || currentDetails.company,
+    role: parsed.role || rolesList[0] || currentDetails.role,
+    candidateRoles: rolesList,
+    email: parsed.email || currentDetails.email,
+    candidateEmails: parsed.candidateEmails || currentDetails.candidateEmails || [],
+    location: parsed.location || currentDetails.location,
+    experience: parsed.experience || currentDetails.experience,
+    skills: Array.isArray(parsed.skills) && parsed.skills.length > 0 ? parsed.skills : currentDetails.skills,
+    jobDescription: parsed.jobDescription || currentDetails.jobDescription,
+    applicationInstructions: parsed.applicationInstructions || currentDetails.applicationInstructions,
+    confidence: 0.99,
+    rawText: rawText || currentDetails.rawText
+  };
+}
+
+function parseResponseJson(rawJson: string): Partial<ExtractedJobDetails> {
+  const cleanedJson = rawJson.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  return JSON.parse(cleanedJson) as Partial<ExtractedJobDetails>;
+}
+
+async function fixWithGemini(
+  prompt: string,
+  key: string
+): Promise<Partial<ExtractedJobDetails>> {
   const modelsToTry = [
-    activeModel,
+    await resolveAvailableModel(key),
     'gemini-2.0-flash',
     'gemini-1.5-flash-latest',
     'gemini-1.5-flash-8b',
@@ -157,7 +189,7 @@ Return strictly valid JSON matching this schema:
       );
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = await response.json().catch(() => ({})) as { error?: { message?: string } };
         lastErrorMsg = errorData?.error?.message || `HTTP ${response.status}`;
         // If it's a model not found error, continue to next candidate model
         if (lastErrorMsg.includes('not found') || lastErrorMsg.includes('not supported')) {
@@ -166,40 +198,91 @@ Return strictly valid JSON matching this schema:
         throw new Error(lastErrorMsg);
       }
 
-      const data = await response.json();
+      const data = await response.json() as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      };
       const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
       if (!rawJson) {
         throw new Error('AI returned an empty response.');
       }
 
-      const cleanedJson = rawJson.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      const parsed = JSON.parse(cleanedJson);
-
-      const rolesList = Array.isArray(parsed.candidateRoles) && parsed.candidateRoles.length > 0
-        ? parsed.candidateRoles
-        : [parsed.role || currentDetails.role];
-
-      return {
-        company: parsed.company || currentDetails.company,
-        role: parsed.role || rolesList[0] || currentDetails.role,
-        candidateRoles: rolesList,
-        email: parsed.email || currentDetails.email,
-        candidateEmails: parsed.candidateEmails || currentDetails.candidateEmails || [],
-        location: parsed.location || currentDetails.location,
-        experience: parsed.experience || currentDetails.experience,
-        skills: Array.isArray(parsed.skills) && parsed.skills.length > 0 ? parsed.skills : currentDetails.skills,
-        jobDescription: parsed.jobDescription || currentDetails.jobDescription,
-        applicationInstructions: parsed.applicationInstructions || currentDetails.applicationInstructions,
-        confidence: 0.99,
-        rawText: rawText || currentDetails.rawText
-      };
-    } catch (err: any) {
-      if (err.message && !err.message.includes('not found')) {
-        throw new Error(`AI_REQUEST_FAILED: ${err.message}`);
+      return parseResponseJson(rawJson);
+    } catch (error: unknown) {
+      if (error instanceof Error && !error.message.includes('not found')) {
+        throw error;
       }
     }
   }
 
-  throw new Error(`AI_REQUEST_FAILED: ${lastErrorMsg || 'All candidate Gemini models were unavailable.'}`);
+  throw new Error(lastErrorMsg || 'All candidate Gemini models were unavailable.');
+}
+
+async function fixWithOpenAI(
+  prompt: string,
+  key: string
+): Promise<Partial<ExtractedJobDetails>> {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${key}`
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+      temperature: 0.1
+    })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(errorData?.error?.message || `HTTP ${response.status}`);
+  }
+
+  const data = await response.json() as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const rawJson = data.choices?.[0]?.message?.content;
+  if (!rawJson) throw new Error('ChatGPT returned an empty response.');
+  return parseResponseJson(rawJson);
+}
+
+/**
+ * Uses Gemini first and falls back to ChatGPT when Gemini is unavailable.
+ */
+export async function fixJobDetailsWithAI(
+  rawText: string,
+  currentDetails: ExtractedJobDetails,
+  geminiApiKey: string = getSavedGeminiKey(),
+  openAiApiKey: string = getSavedOpenAIKey()
+): Promise<ExtractedJobDetails> {
+  const geminiKey = geminiApiKey.trim();
+  const openAiKey = openAiApiKey.trim();
+  if (!geminiKey && !openAiKey) throw new Error('NO_API_KEY');
+
+  const prompt = createPrompt(rawText, currentDetails);
+  let geminiError: Error | null = null;
+  if (geminiKey) {
+    try {
+      const parsed = await fixWithGemini(prompt, geminiKey);
+      return detailsFromResponse(parsed, rawText, currentDetails);
+    } catch (error) {
+      geminiError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  if (openAiKey) {
+    try {
+      const parsed = await fixWithOpenAI(prompt, openAiKey);
+      return detailsFromResponse(parsed, rawText, currentDetails);
+    } catch (error) {
+      const openAiError = error instanceof Error ? error.message : String(error);
+      const prefix = geminiError ? `Gemini failed: ${geminiError.message}. ` : '';
+      throw new Error(`AI_REQUEST_FAILED: ${prefix}ChatGPT fallback failed: ${openAiError}`);
+    }
+  }
+
+  throw new Error(`AI_REQUEST_FAILED: ${geminiError?.message || 'Gemini request failed.'}`);
 }

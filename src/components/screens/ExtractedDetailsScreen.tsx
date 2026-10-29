@@ -21,7 +21,13 @@ import {
   ChevronUp
 } from 'lucide-react';
 import { ExtractedJobDetails } from '../../types';
-import { fixJobDetailsWithAI, getSavedGeminiKey, saveGeminiKey } from '../../services/aiService';
+import {
+  fixJobDetailsWithAI,
+  getSavedGeminiKey,
+  getSavedOpenAIKey,
+  saveGeminiKey,
+  saveOpenAIKey
+} from '../../services/aiService';
 
 interface ExtractedDetailsScreenProps {
   details: ExtractedJobDetails;
@@ -44,6 +50,7 @@ export const ExtractedDetailsScreen: React.FC<ExtractedDetailsScreenProps> = ({
   const [aiSuccessMessage, setAiSuccessMessage] = useState<string | null>(null);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState(getSavedGeminiKey());
+  const [openAiKeyInput, setOpenAiKeyInput] = useState(getSavedOpenAIKey());
   const [aiError, setAiError] = useState<string | null>(null);
   const [showRawOcr, setShowRawOcr] = useState(false);
 
@@ -72,9 +79,10 @@ export const ExtractedDetailsScreen: React.FC<ExtractedDetailsScreenProps> = ({
     setEditingField(null);
   };
 
-  const handleTriggerAIFix = async (providedKey?: string) => {
-    const key = providedKey || getSavedGeminiKey();
-    if (!key) {
+  const handleTriggerAIFix = async (providedGeminiKey?: string, providedOpenAiKey?: string) => {
+    const geminiKey = providedGeminiKey ?? getSavedGeminiKey();
+    const openAiKey = providedOpenAiKey ?? getSavedOpenAIKey();
+    if (!geminiKey && !openAiKey) {
       setShowApiKeyModal(true);
       return;
     }
@@ -100,10 +108,15 @@ export const ExtractedDetailsScreen: React.FC<ExtractedDetailsScreenProps> = ({
     }, 900);
 
     try {
-      const fixed = await fixJobDetailsWithAI(details.rawText || details.jobDescription, details, key);
+      const fixed = await fixJobDetailsWithAI(
+        details.rawText || details.jobDescription,
+        details,
+        geminiKey,
+        openAiKey
+      );
       clearInterval(stepTimer);
       onUpdateDetails(fixed);
-      setAiSuccessMessage('All job details fixed and verified by AI!');
+      setAiSuccessMessage('Job details fixed with AI!');
       setAiStepMsg('');
       setShowApiKeyModal(false);
       setTimeout(() => setAiSuccessMessage(null), 4000);
@@ -111,10 +124,11 @@ export const ExtractedDetailsScreen: React.FC<ExtractedDetailsScreenProps> = ({
       clearInterval(stepTimer);
       setAiStepMsg('');
       console.error('AI Fix error:', err);
-      if (err.message === 'NO_API_KEY') {
+      if (err instanceof Error && err.message === 'NO_API_KEY') {
         setShowApiKeyModal(true);
       } else {
-        setAiError(err.message?.replace('AI_REQUEST_FAILED: ', '') || 'Failed to connect to AI service. Please check your key.');
+        const message = err instanceof Error ? err.message : String(err);
+        setAiError(message.replace('AI_REQUEST_FAILED: ', '') || 'Failed to connect to AI services. Check your API keys.');
       }
     } finally {
       setIsFixingWithAI(false);
@@ -122,12 +136,13 @@ export const ExtractedDetailsScreen: React.FC<ExtractedDetailsScreenProps> = ({
   };
 
   const handleSaveKeyAndFix = () => {
-    if (!apiKeyInput.trim()) {
-      setAiError('Please enter a valid Gemini API key.');
+    if (!apiKeyInput.trim() && !openAiKeyInput.trim()) {
+      setAiError('Enter a Gemini key, an OpenAI key, or both to continue.');
       return;
     }
-    saveGeminiKey(apiKeyInput.trim());
-    handleTriggerAIFix(apiKeyInput.trim());
+    saveGeminiKey(apiKeyInput);
+    saveOpenAIKey(openAiKeyInput);
+    handleTriggerAIFix(apiKeyInput.trim(), openAiKeyInput.trim());
   };
 
   const isEmailMissing = !details.email || details.email.trim() === '';
@@ -707,7 +722,7 @@ export const ExtractedDetailsScreen: React.FC<ExtractedDetailsScreenProps> = ({
         </div>
       )}
 
-      {/* Free Gemini API Key Setup Modal */}
+      {/* AI API Key Setup Modal */}
       {showApiKeyModal && (
         <div className="modal-overlay" onClick={() => setShowApiKeyModal(false)}>
           <div className="modal-content-card" onClick={(e) => e.stopPropagation()}>
@@ -715,7 +730,7 @@ export const ExtractedDetailsScreen: React.FC<ExtractedDetailsScreenProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Sparkles size={20} color="#7C3AED" />
                 <h3 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text-main)' }}>
-                  Auto-Fix with Free AI
+                  Set Up AI Fix
                 </h3>
               </div>
               <button
@@ -727,7 +742,7 @@ export const ExtractedDetailsScreen: React.FC<ExtractedDetailsScreenProps> = ({
             </div>
 
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: '14px' }}>
-              To auto-fix and verify all job details with 99% accuracy, provide a <strong>100% free</strong> Google Gemini API key.
+              Add one or both keys. The Fix with AI button tries Gemini first and uses OpenAI if the Gemini request fails.
             </p>
 
             <div
@@ -741,7 +756,7 @@ export const ExtractedDetailsScreen: React.FC<ExtractedDetailsScreenProps> = ({
                 color: '#4338CA'
               }}
             >
-              <span>Get a free key in 30 seconds (no credit card): </span>
+              <span>Get a Gemini key: </span>
               <a
                 href="https://aistudio.google.com/apikey"
                 target="_blank"
@@ -754,18 +769,42 @@ export const ExtractedDetailsScreen: React.FC<ExtractedDetailsScreenProps> = ({
             </div>
 
             <div style={{ marginBottom: '16px' }}>
-              <label className="input-label">Gemini API Key</label>
+              <label className="input-label">Gemini API Key (primary)</label>
               <div style={{ position: 'relative' }}>
                 <input
                   type="password"
                   value={apiKeyInput}
                   onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder="AIzaSy..."
+                  placeholder="AIzaSy... (optional if using OpenAI)"
                   className="input-field"
                   style={{ paddingLeft: '38px' }}
+                  autoComplete="off"
                 />
                 <Key size={16} color="#94A3B8" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
               </div>
+            </div>
+            <div style={{ marginBottom: '16px' }}>
+              <label className="input-label">OpenAI API Key (fallback)</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="password"
+                  value={openAiKeyInput}
+                  onChange={(e) => setOpenAiKeyInput(e.target.value)}
+                  placeholder="sk-... (optional if using Gemini)"
+                  className="input-field"
+                  style={{ paddingLeft: '38px' }}
+                  autoComplete="off"
+                />
+                <Key size={16} color="#94A3B8" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+              </div>
+              <a
+                href="https://platform.openai.com/api-keys"
+                target="_blank"
+                rel="noreferrer"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '6px', fontSize: '11px', fontWeight: 600, color: 'var(--primary)' }}
+              >
+                Get an OpenAI API key <ExternalLink size={11} />
+              </a>
             </div>
 
             {aiError && (
@@ -791,7 +830,7 @@ export const ExtractedDetailsScreen: React.FC<ExtractedDetailsScreenProps> = ({
                 type="button"
               >
                 {isFixingWithAI ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                <span>Save & Fix Now</span>
+                <span>Save Keys & Fix</span>
               </button>
             </div>
           </div>

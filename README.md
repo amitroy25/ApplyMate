@@ -26,7 +26,7 @@ The app includes the following screens:
 3. **Screen 3 — Screenshot Upload (`UploadScreen.tsx`)**
    - High-fidelity preview of the LinkedIn post screenshot (or uploaded image from user gallery).
    - Actions to **Replace Image** or **Remove**.
-   - Crop, zoom, or rotate uploaded screenshots before OCR; optional Gemini cleanup runs when a key is configured.
+   - Crop, zoom, or rotate uploaded screenshots before local OCR. AI cleanup runs only when requested with **Fix with AI**.
    - **Extract Job Details →** primary CTA with progress and actionable retry/continue options if extraction fails.
 
 4. **Screen 4 — Extracted Job Details (`ExtractedDetailsScreen.tsx`)**
@@ -171,7 +171,7 @@ Before calling Gmail, the app saves an application as `Sending`. A successful Gm
 
 ### Implemented
 
-* OCR text recognition and parsing, optional Gemini cleanup, and editable generated email drafts.
+* Local OCR text recognition and parsing, optional Gemini cleanup with OpenAI fallback, and editable generated email drafts.
 * Android PWA screenshot sharing through the installed app, with in-browser crop, zoom, rotation, OCR, and job-detail review.
 * Supabase Google OAuth, per-user Postgres data, and private PDF resume storage (requires setup above).
 * Confirmed Gmail API sending with a PDF MIME attachment, plain-text and formatted HTML email alternatives, and explicit sending/sent/failed states.
@@ -186,6 +186,10 @@ Before calling Gmail, the app saves an application as `Sending`. A successful Gm
 4. If ApplyMate is not listed in the share sheet, open the installed app once and try again. You can always choose **Replace Image** in ApplyMate to upload manually.
 
 Shared screenshots are limited to PNG, JPEG, or WebP and 15 MB. The service worker accepts the image under the configured form field or another image-file field, stores a temporary copy in that browser's IndexedDB, and removes expired copies after 24 hours; the app deletes a consumed copy after loading it. Sharing requires the installed PWA, browser support, and a service worker controlling the app. From Android's screenshot preview, choose its **Share** button, or share the saved screenshot from Photos/Gallery. Sharing a LinkedIn post itself sends its link rather than a screenshot. Verify the share-sheet flow on the target Android device after deployment; desktop build checks cannot confirm device-specific share behavior.
+
+### Optional AI cleanup keys
+
+Screenshot text and initial job details are extracted locally with OCR. To clean up the extracted fields, add a Gemini API key and, optionally, an OpenAI API key under **Settings → AI Fix Providers**. Both keys are stored in the current browser's local storage; the **Fix All Content with AI** action tries Gemini first and falls back to OpenAI (`gpt-4o-mini`) if Gemini fails. OpenAI API usage may incur charges.
 
 ### Remaining before public launch
 

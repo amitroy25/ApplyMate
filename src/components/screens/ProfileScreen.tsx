@@ -1,14 +1,16 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { User, Phone, Briefcase, Code, FileText, CheckCircle2, ChevronRight, Edit3, X, Mail } from 'lucide-react';
 import { UserProfile } from '../../types';
 
 interface ProfileScreenProps {
   userProfile: UserProfile;
+  isProfileReady: boolean;
   onUpdateProfile: (updated: UserProfile, resumeFile?: File) => Promise<UserProfile>;
 }
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   userProfile,
+  isProfileReady,
   onUpdateProfile
 }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -16,6 +18,16 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isEditing && !isSaving) setFormData(userProfile);
+  }, [isEditing, isSaving, userProfile]);
+
+  const startEditing = () => {
+    if (!isProfileReady) return;
+    setFormData(userProfile);
+    setIsEditing(true);
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -56,10 +68,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           Profile
         </h2>
         <button
-          onClick={() => {
-            setFormData(userProfile);
-            setIsEditing(true);
-          }}
+          onClick={startEditing}
+          disabled={!isProfileReady || isSaving}
           className="header-action-btn"
           aria-label="Edit Profile"
           type="button"
@@ -71,6 +81,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       {errorMessage && !isEditing && (
         <div role="alert" style={{ margin: '0 20px 12px', color: '#B91C1C', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '10px', padding: '10px 12px', fontSize: '12px' }}>
           {errorMessage}
+        </div>
+      )}
+      {!isProfileReady && (
+        <div role="status" style={{ margin: '0 20px 12px', color: '#475569', backgroundColor: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: '10px', padding: '10px 12px', fontSize: '12px' }}>
+          Your account profile is loading or unavailable. Resume upload is disabled until your account data is ready.
         </div>
       )}
 
@@ -115,7 +130,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         <div className="card" style={{ padding: '6px 16px' }}>
           {/* Current Role */}
           <div
-            onClick={() => setIsEditing(true)}
+            onClick={startEditing}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -141,7 +156,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
           {/* Phone Number */}
           <div
-            onClick={() => setIsEditing(true)}
+            onClick={startEditing}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -167,7 +182,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
           {/* Skills */}
           <div
-            onClick={() => setIsEditing(true)}
+            onClick={startEditing}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -231,13 +246,15 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
             <button
               onClick={() => fileInputRef.current?.click()}
+              disabled={!isProfileReady || isSaving}
               style={{
                 background: 'none',
                 border: 'none',
                 color: 'var(--primary)',
                 fontSize: '13px',
                 fontWeight: 700,
-                cursor: 'pointer'
+                cursor: isProfileReady && !isSaving ? 'pointer' : 'not-allowed',
+                opacity: isProfileReady && !isSaving ? 1 : 0.5
               }}
               type="button"
             >
@@ -252,6 +269,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           ref={fileInputRef}
           onChange={handleResumeFileChange}
           accept="application/pdf"
+          disabled={!isProfileReady || isSaving}
           style={{ display: 'none' }}
         />
 

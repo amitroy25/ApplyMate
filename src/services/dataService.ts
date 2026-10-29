@@ -213,7 +213,8 @@ export async function uploadResume(userId: string, file: File): Promise<{
   path: string;
   size: string;
 }> {
-  if (file.type !== 'application/pdf' || !file.name.toLowerCase().endsWith('.pdf')) {
+  const allowedPdfTypes = new Set(['', 'application/pdf', 'application/x-pdf', 'application/octet-stream']);
+  if (!file.name.toLowerCase().endsWith('.pdf') || !allowedPdfTypes.has(file.type.toLowerCase())) {
     throw new Error('Choose a PDF file for your resume.');
   }
   if (file.size > 10 * 1024 * 1024) {
@@ -227,7 +228,7 @@ export async function uploadResume(userId: string, file: File): Promise<{
     contentType: 'application/pdf',
     upsert: false
   });
-  if (error) throw error;
+  if (error) throw new Error(`Could not upload resume for this account: ${error.message}`);
 
   return { path, size: `${Math.max(1, Math.round(file.size / 1024))} KB` };
 }

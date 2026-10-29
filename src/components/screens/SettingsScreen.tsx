@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Mail, Bell, Sliders, Check, Save, Sparkles, Key, ExternalLink, Loader2 } from 'lucide-react';
 import { AppSettings, UserProfile } from '../../types';
-import { getSavedGeminiKey, saveGeminiKey } from '../../services/aiService';
+import {
+  getSavedGeminiKey,
+  getSavedOpenAIKey,
+  saveGeminiKey,
+  saveOpenAIKey
+} from '../../services/aiService';
 
 interface SettingsScreenProps {
   settings: AppSettings;
@@ -30,6 +35,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 }) => {
   const [formData, setFormData] = useState(settings);
   const [geminiKey, setGeminiKey] = useState(getSavedGeminiKey());
+  const [openAiKey, setOpenAiKey] = useState(getSavedOpenAIKey());
   const [savedNotification, setSavedNotification] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -38,13 +44,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     setIsSaving(true);
     setSaveError(null);
     saveGeminiKey(geminiKey);
+    saveOpenAIKey(openAiKey);
     try {
       await onSaveSettings(formData);
       setSavedNotification(true);
       setTimeout(() => setSavedNotification(false), 2000);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setSaveError(`${message} Your Gemini API key was saved in this browser.`);
+      setSaveError(`${message} Your AI API keys were saved in this browser.`);
     } finally {
       setIsSaving(false);
     }
@@ -124,11 +131,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             )}
           </div>
 
-          {/* AI Extraction Engine (Gemini) */}
+          {/* AI Fix Providers */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
               <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                AI Fix & Extraction Engine
+                AI Fix Providers
               </span>
               <a
                 href="https://aistudio.google.com/apikey"
@@ -140,29 +147,61 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 <ExternalLink size={11} />
               </a>
             </div>
-            <div className="card" style={{ padding: '12px 14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                <Sparkles size={16} color="#7C3AED" />
-                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>
-                  Google Gemini API
-                </span>
-                <span style={{ fontSize: '10px', fontWeight: 700, color: '#15803D', backgroundColor: '#DCFCE7', padding: '2px 6px', borderRadius: '4px', marginLeft: 'auto' }}>
-                  100% Free Tier
-                </span>
+            <div className="card" style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                  <Sparkles size={16} color="#7C3AED" />
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>
+                    Google Gemini API (primary)
+                  </span>
+                  <span style={{ fontSize: '10px', fontWeight: 700, color: '#15803D', backgroundColor: '#DCFCE7', padding: '2px 6px', borderRadius: '4px', marginLeft: 'auto' }}>
+                    Free tier
+                  </span>
+                </div>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="password"
+                    value={geminiKey}
+                    onChange={(e) => setGeminiKey(e.target.value)}
+                    placeholder="Paste your Gemini API key (AIzaSy...)"
+                    className="input-field"
+                    style={{ paddingLeft: '34px', fontSize: '13px' }}
+                    autoComplete="off"
+                  />
+                  <Key size={15} color="#94A3B8" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
+                </div>
               </div>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type="password"
-                  value={geminiKey}
-                  onChange={(e) => setGeminiKey(e.target.value)}
-                  placeholder="Paste your Gemini API key (AIzaSy...)"
-                  className="input-field"
-                  style={{ paddingLeft: '34px', fontSize: '13px' }}
-                />
-                <Key size={15} color="#94A3B8" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                  <Sparkles size={16} color="#10A37F" />
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>
+                    OpenAI API (fallback)
+                  </span>
+                  <a
+                    href="https://platform.openai.com/api-keys"
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="Get an OpenAI API key"
+                    style={{ marginLeft: 'auto', color: 'var(--primary)', display: 'inline-flex' }}
+                  >
+                    <ExternalLink size={14} />
+                  </a>
+                </div>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="password"
+                    value={openAiKey}
+                    onChange={(e) => setOpenAiKey(e.target.value)}
+                    placeholder="Paste your OpenAI API key (sk-...)"
+                    className="input-field"
+                    style={{ paddingLeft: '34px', fontSize: '13px' }}
+                    autoComplete="off"
+                  />
+                  <Key size={15} color="#94A3B8" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
+                </div>
               </div>
-              <span style={{ fontSize: '11px', color: 'var(--text-subtle)', marginTop: '6px', display: 'block' }}>
-                Powers the round "Fix All Content with AI" button on extracted details.
+              <span style={{ fontSize: '11px', color: 'var(--text-subtle)' }}>
+                Keys are saved only in this browser. Fix with AI tries Gemini first, then OpenAI if Gemini fails. OpenAI usage may be billed by OpenAI.
               </span>
             </div>
           </div>
